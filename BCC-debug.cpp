@@ -23,6 +23,31 @@ struct BCC {
 };
 
 
+void printBCC(BCC B){
+    cout << "\tGraph: ";
+    for(auto x : B.nodes){
+        cout <<"\t"<< x << ": [";
+        for(auto y : B.edges[x]){
+            cout << y << " ";
+        }
+        cout << "]"; 
+    }
+    cout << endl;
+    cout << "\tPersonal bound: " << B.personalBound << endl;
+    cout << "\tID: " << B.myID << endl;
+    cout << "\tSources: ";
+    for(auto ss : B.sources)
+        cout << ss << " ";
+    cout << endl;
+    cout << "\tTarget: " << B.target << endl;
+    cout << "\tIs leaf? " << B.isLeaf << endl;
+
+    cout << endl;
+
+    return;
+}
+
+
 
 // these are global vectors 
 vector<bool> visited;
@@ -108,7 +133,7 @@ void findBCCs(int u, BCC &B, vector<BCC> &BCC_vector, vector<int> &source_neighb
 
             // if u is not root and low value of one of its child is more than discovery value of u, 
             // OR if u is the root (returning from a child of the root identifies a BCC), then we close a BCC
-            if (parent[u] != -1 && low[v] >= disc[u]){ // here is where I close my articulation point
+            if ((parent[u] != -1 && low[v] >= disc[u]) || parent[u] == -1){ // here is where I close my articulation point
                 BCC current_BCC;
                 current_BCC.target = u; // u is the target of the current BCC
                 current_BCC.nodes.push_back(u);
@@ -135,10 +160,13 @@ void findBCCs(int u, BCC &B, vector<BCC> &BCC_vector, vector<int> &source_neighb
                     current_BCC.nodes.push_back(x);
                     // cout << "Adding node " << x << " to current BCC"<< endl;
                     // check if x is an art point; if it is, add it to sources
-                    // also check if x is a neighbor of the source
-                    if(is_art_point[x] || find(source_neighbors.begin(), source_neighbors.end(), x) != source_neighbors.end()){
+                    // also check if x is a neighbor of the source SEPARATELY 
+                    if(is_art_point[x]){
                         current_BCC.sources.push_back(x);
                     }
+
+                    if(find(source_neighbors.begin(), source_neighbors.end(), x) != source_neighbors.end())
+                        current_BCC.sources.push_back(x);
 
                     tree_stack.pop_back();
                     x = tree_stack.back();
@@ -148,9 +176,13 @@ void findBCCs(int u, BCC &B, vector<BCC> &BCC_vector, vector<int> &source_neighb
                 if(x!= v) // always finish at v
                     throw logic_error("Destacked more than what we should have");
 
-                if(is_art_point[v] || find(source_neighbors.begin(), source_neighbors.end(), v) != source_neighbors.end()){
+                // this needs to be split, as sources can be repeated!
+                if(is_art_point[v]){
                     current_BCC.sources.push_back(v);
                 }
+
+                if(find(source_neighbors.begin(), source_neighbors.end(), v) != source_neighbors.end())
+                    current_BCC.sources.push_back(v);
 
                 current_BCC.nodes.push_back(v); 
 
@@ -244,11 +276,12 @@ vector<BCC> expand(BCC &B, int s){
 
 
     // after call for art points, IF STACK IS NONEMPTY finish unstacking and form last new BCC
-    if(!tree_stack.empty()){
-        // cout << "Stack is non-empty after function; it is: ";
-        // for (auto ss : tree_stack)
-        //     cout << ss << " ";
-        // cout << endl;
+    // note: by non-empty we mean at least two elements, as if t is an articulation point then it must remain in the stack
+    if(tree_stack.size() > 1){
+        cout << "Stack is non-empty after function; it is: ";
+        for (auto ss : tree_stack)
+            cout << ss << " ";
+        cout << endl;
 
         BCC current_BCC;
         current_BCC.target = B.target; // B.target is the target of the current BCC
@@ -259,7 +292,10 @@ vector<BCC> expand(BCC &B, int s){
         for(auto stack_el : tree_stack){
             current_BCC.nodes.push_back(stack_el);
 
-            if(is_art_point[stack_el] || find(source_neighbors.begin(), source_neighbors.end(), stack_el) != source_neighbors.end())
+            if(is_art_point[stack_el])
+                current_BCC.sources.push_back(stack_el);
+
+            if(find(source_neighbors.begin(), source_neighbors.end(), stack_el) != source_neighbors.end())
                 current_BCC.sources.push_back(stack_el);
         }
 
@@ -315,7 +351,7 @@ vector<BCC> expand(BCC &B, int s){
 
 int main(){
     BCC G;
-    N = 11;
+    N = 13;
     maxID = 1;
 
     visited.resize(N);
@@ -324,21 +360,39 @@ int main(){
     low.resize(N);
     is_art_point.resize(N);
 
+    // G.sources = {0};
+    // G.target = 10;
+    // G.myID = 1;
+    // G.nodes = {0,1,2,3,4,5,6,7,8,9,10};
+    // G.edges.insert({0, {1,4,6,7}});
+    // G.edges.insert({1, {0,2,3}});
+    // G.edges.insert({2, {1,3}});
+    // G.edges.insert({3, {1,2,4,5,6}});
+    // G.edges.insert({4, {3,0,6}});
+    // G.edges.insert({5, {3,6}});
+    // G.edges.insert({6, {3,4,5,0,7,8}});
+    // G.edges.insert({7, {6,8,0}});
+    // G.edges.insert({8, {7,6,10,9}});
+    // G.edges.insert({9, {8,10}});
+    // G.edges.insert({10, {8,9}});
+
     G.sources = {0};
-    G.target = 10;
+    G.target = 12;
     G.myID = 1;
-    G.nodes = {0,1,2,3,4,5,6,7,8,9,10};
-    G.edges.insert({0, {1,4,6,7}});
-    G.edges.insert({1, {0,2,3}});
-    G.edges.insert({2, {1,3}});
-    G.edges.insert({3, {1,2,4,5,6}});
-    G.edges.insert({4, {3,0,6}});
-    G.edges.insert({5, {3,6}});
-    G.edges.insert({6, {3,4,5,0,7,8}});
-    G.edges.insert({7, {6,8,0}});
-    G.edges.insert({8, {7,6,10,9}});
+    G.nodes = {0,1,2,3,4,5,6,7,8,9,10,11,12};
+    G.edges.insert({0, {2,7,8,10,11}});
+    G.edges.insert({1, {2,3}});
+    G.edges.insert({2, {1,0,3}});
+    G.edges.insert({3, {1,2,4,5}});
+    G.edges.insert({4, {3,5,12}});
+    G.edges.insert({5, {4,3,6,7,12}});
+    G.edges.insert({6, {5,7}});
+    G.edges.insert({7, {5,6,0}});
+    G.edges.insert({8, {0,9,10}});
     G.edges.insert({9, {8,10}});
-    G.edges.insert({10, {8,9}});
+    G.edges.insert({10, {0,8,9,11,12}});
+    G.edges.insert({11, {12,10,0}});
+    G.edges.insert({12, {4,5,10,11}});
 
     cout << "Original graph: " << endl;
     for(auto x : G.nodes){
@@ -357,28 +411,13 @@ int main(){
 
     for (int i = 0; i < result.size(); i++)
     {
-        cout << "B_"  << i << ": " << endl;
-        cout << "\tGraph: ";
-        for(auto x : result[i].nodes){
-            cout <<"\t"<< x << ": [";
-            for(auto y : result[i].edges[x]){
-                cout << y << " ";
-            }
-            cout << "]"; 
-        }
-        cout << endl;
-        cout << "\tPersonal bound: " << result[i].personalBound << endl;
-        cout << "\tID: " << result[i].myID << endl;
-        cout << "\tSources: ";
-        for(auto ss : result[i].sources)
-            cout << ss << " ";
-        cout << endl;
-        cout << "\tTarget: " << result[i].target << endl;
-        cout << "\tIs leaf? " << result[i].isLeaf << endl;
-
-        cout << endl;
+        cout << "B_"  << i << ": ";
+        printBCC(result[i]);
     }
     
+
+    // cout << "Expanding the second component found with respect to NON source s= 5"<< endl;
+    // vector<BCC> result2 = expand(result[1], 5);
 
     return 0;
 }
