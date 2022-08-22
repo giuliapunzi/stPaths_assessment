@@ -261,10 +261,17 @@ vector<BCC> expand(BCC &B, int s){
     tree_stack.erase(tree_stack.begin(), tree_stack.end());
     visit_time = 0;
 
-    for(int i = 0; i < N; i++){
-        visited[i] = false;
-        parent[i] = -2;
-        is_art_point[i] = false;
+    // for(int i = 0; i < N; i++){
+    //     visited[i] = false;
+    //     parent[i] = -2;
+    //     is_art_point[i] = false;
+    // }
+
+    // only initialize BCC nodes
+    for(auto u : B.nodes){
+        visited[u] = false;
+        parent[u] = -2;
+        is_art_point[u] = false;
     }
     
     parent[B.target] = -1;
