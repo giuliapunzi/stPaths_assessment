@@ -145,30 +145,51 @@ void create_graph(char* filename)
  
 
 
-void printBCC(BCC B){
+void printBCC(BCC* B){
     cout << "\tGraph: ";
-    for(auto x : B.nodes){
+    for(auto x : B->nodes){
         cout <<"\t"<< x << ": [";
-        for(auto y : B.edges[x]){
+        for(auto y : B->edges[x]){
             cout << y << " ";
         }
         cout << "]"; 
     }
     cout << endl;
-    cout << "\tPersonal bound: " << B.personalBound << endl;
-    cout << "\tID: " << B.myID << endl;
+    cout << "\tPersonal bound: " << B->personalBound << endl;
+    cout << "\tID: " << B->myID << endl;
     cout << "\tSources: ";
-    for(auto ss : B.sources)
+    for(auto ss : B->sources)
         cout << "(" << ss.first << ", " << ss.second << ") ";
     cout << endl;
-    cout << "\tTarget: " << B.target << endl;
-    cout << "\tIs leaf? " << B.isLeaf << endl;
+    cout << "\tTarget: " << B->target << endl;
+    cout << "\tIs leaf? " << B->isLeaf << endl;
 
     cout << endl;
 
     return;
 }
 
+// print all my children, then endl and myself
+void printMPtree(mptnode * tree_node){
+    for (auto child : tree_node->children){
+        printMPtree(child);
+        cout << endl;    
+    }
+    cout << tree_node->corrID << " ";
+
+    return;
+}
+
+// delete all data structures for the algorithm
+void delete_all(mptnode* tree_node){
+    for (auto child : tree_node->children)
+        delete_all(child);
+    
+    delete tree_node->corrBCC;
+    delete tree_node;
+
+    return;
+}
 
 void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neighbors, int og_multiplicity)
 {   
@@ -298,7 +319,14 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                     }
                 }
                 current_BCC->num_edges = current_BCC->num_edges/2;
-                current_BCC->personalBound = current_BCC->num_edges - current_BCC->nodes.size() + 1; // initialize personal bound
+                // PERSONAL BOUND MUST BE CYCLOMATIC MULTIPLIED FOR THE NUMBER OF "VALID" SOURCES = NOT CONTAINING -1
+                int cyclomatic_bound = current_BCC->num_edges - current_BCC->nodes.size() + 1; // initialize personal bound
+                current_BCC->personalBound = cyclomatic_bound;
+                for (auto spair : current_BCC->sources)
+                {
+                    if(spair.second != -1)
+                        current_BCC->personalBound += cyclomatic_bound*spair.second;
+                }
 
                 // also, set up if it is a leaf: that is, if it ONLY has sources with multiplicity > 0, that is, they are neighbors of the source
                 if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [](const pair<int, int>& p){return p.second == -1;}) == current_BCC->sources.end())
@@ -320,7 +348,76 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
 }
 
 
+// INPUT: BCC newB that has been exploded into decomposed_BCC vector of BCC, pointer to the root of the new tree for this vector of BCC and to node_to_replace, node of the tree to be replaced with the new subtree
+// OUTPUT: Creates the full multisource paths tree for decomposed_BCC with root new_tree, also filling the corresponding prodAncestor bounds and adding leaves to leaf vector 
+void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_replace){
+    int final_target = newB->target;
+    vector<BCC*>::iterator find_root = find_if(decomposed_BCC.begin(), decomposed_BCC.end(), [&final_target](const BCC* comp){return comp->target == final_target;});
+    if(find_root == decomposed_BCC.end())
+        throw logic_error("Error when exploding: cannot find component containing target");
 
+    mptnode* new_subtree;
+    new_subtree->corrBCC = *find_root;
+    new_subtree->corrID = (*find_root)->myID;
+    new_subtree->children = {};
+
+    new_subtree->parent = node_to_replace->parent; // attach new tree to the parent of the leaf we exploded
+    if(new_subtree->parent != NULL) // note: the node could have been the root of the tree
+        node_to_replace->parent->children.push_back(new_subtree); // add the new tree pointer to the children of the parent of leaf node
+
+    if(new_subtree->parent == NULL && new_subtree->corrBCC->target != t)
+        throw logic_error("Root of the multisource paths tree does not contain target");
+
+    new_subtree->corrBCC->prodAncestors = node_to_replace->corrBCC->prodAncestors; // the product of the ancestors of the root is equal to the one of the old leaf node
+
+    vector<mptnode*> tree_nodes_stack = {new_subtree};
+    mptnode *current_node, *new_node;
+    while (!tree_nodes_stack.empty()){
+        current_node = tree_nodes_stack.back();
+        tree_nodes_stack.pop_back();
+        if(!current_node->corrBCC->isLeaf){ // only explore children if the corresponding BCC is not a leaf
+            for (auto spair : current_node->corrBCC->sources){ // go through all sources of the component 
+                auto i = decomposed_BCC.begin();
+                auto end = decomposed_BCC.end();
+                while (i!=end)
+                {
+                    i = find_if(i, end, [&](const BCC* comp){comp->target == spair.first;});
+                    if(i!= end){ // in this case, we found a component which has target equal to the current source of current_node
+                        // create a new node attached to current_node, push it to the tree_nodes_stack, and update the corresponding prodAncestors bound accordingly
+                        new_node = new mptnode;
+                        new_node->corrBCC = *i;
+                        new_node->corrID = new_node->corrBCC->myID;
+                        new_node->parent = current_node;
+                        current_node->children.push_back(new_node);
+                        new_node->corrBCC->prodAncestors = current_node->corrBCC->prodAncestors*current_node->corrBCC->personalBound;
+
+                        tree_nodes_stack.push_back(new_node);
+                    }
+                }  
+            }
+        }
+        else{ // if current node is indeed a leaf, add it to the leaf vector of tree nodes
+            tree_leaves.push_back(current_node);
+        }
+    }
+
+    // new subtree is already attached to node_to_replace; we just need to remove the latter altogether
+    if(new_subtree->parent != NULL){
+        auto child_iterator = find(node_to_replace->parent->children.begin(), node_to_replace->parent->children.end(), node_to_replace);
+        if(child_iterator == node_to_replace->parent->children.end())
+            throw logic_error("Parent of node to replace does not have him as one of its children");
+        node_to_replace->parent->children.erase(child_iterator); // remove the node as a child of its parent
+    }
+
+    if(node_to_replace->children.size()!= 0) // extra check
+        throw logic_error("Node to replace has children");
+
+    // remove the full node and its BCC
+    delete node_to_replace->corrBCC;
+    delete node_to_replace;
+
+    return;
+}
 
 // INPUT: a pointer to the leaf BCC we wish to expand
 // OUTPUT: a vector of non trivial BCCs which form the block-cut tree of B after the removal of s
@@ -333,7 +430,8 @@ void explode(mptnode* leaf_node){
         throw invalid_argument("Trying to expand a non-leaf node of the multi-source paths tree");
 
     // choose a source at random 
-    pair<int,int> sBpair = B->sources[rand() % B->sources.size()];
+    int sIndex = rand() % B->sources.size();
+    pair<int,int> sBpair = B->sources[sIndex];
 
     // remember multiplicity of s, as it will be the starting one of all its neighbors
     int og_multiplicity = sBpair.second;
@@ -342,13 +440,20 @@ void explode(mptnode* leaf_node){
     if(og_multiplicity == -1) // the BCC had children BCCs
         throw logic_error("Trying to expand a non-leaf node of the multi-source paths tree");
 
+
     // we need to consider two cases according to the size of sBpair:
     // 1) if it is 1, we remove B and substitute it with the new tree of components after the removal of s
     // 2) if it is >1, B stays and we modify a copy newB, which will be a new child of the parent of leaf_node
     // the same for the tree node
+    // in any case, the selected source must be removed from the graph's sources
+    if(sBpair.second > 1)
+        B->sources[sIndex].second--;
+    else
+        B->sources.erase(B->sources.begin() + sIndex);
+
     BCC* newB = B; // start with a pointer to B
-    mptnode* new_node = leaf_node;
-    if(B->sources.size()>1){ // if the number of sources is greater than one, create an actual copy
+    mptnode* node_to_replace = leaf_node;
+    if(B->sources.size()>0){ // if the number of sources is greater than zero (sB has been already removed), create an actual copy
         newB = new BCC;
         newB->sources = B->sources;
         newB->target = B->target;
@@ -360,13 +465,13 @@ void explode(mptnode* leaf_node){
         newB->edges = B->edges;
         newB->num_edges = B->num_edges;
 
-        new_node = new mptnode;
-        new_node->corrID = leaf_node->corrID;
-        new_node->corrBCC = newB;
-        new_node->children = {};
-        new_node->parent = leaf_node->parent;
+        node_to_replace = new mptnode;
+        node_to_replace->corrID = leaf_node->corrID;
+        node_to_replace->corrBCC = newB;
+        node_to_replace->children = {};
+        node_to_replace->parent = leaf_node->parent;
     }
-    // now newB, new_node holds the correct graph to modify
+    // now newB, node_to_replace hold the correct graph to modify
 
     // remove s from nodes, incident edges of s from edges
     newB->nodes.erase(find(newB->nodes.begin(), newB->nodes.end(), sB));
@@ -487,38 +592,19 @@ void explode(mptnode* leaf_node){
     }
 
     // need to build tree and update prodAncestors fields 
-    mptnode* new_tree; // this is a pointer to the root of the new tree; the root corresponds to the only component holding newB->target as target
-    int final_target = newB->target;
-    vector<BCC*>::iterator find_root = find_if(decomposed_BCC.begin(), decomposed_BCC.end(), [&final_target](const BCC* comp){return comp->target == final_target;});
-    if(find_root == decomposed_BCC.end())
-        throw logic_error("Error when exploding: cannot find component containing target");
+    mptnode* new_subtree; // this is a pointer to the root of the new tree; the root corresponds to the only component holding newB->target as target
+    update_tree(newB, decomposed_BCC, node_to_replace);
+    
 
-    new_tree->corrBCC = *find_root;
-    new_tree->corrID = (*find_root)->myID;
-    new_tree->parent = leaf_node->parent; // attach new tree to the parent of the leaf we exploded
-    new_tree->children = {};
-    leaf_node->parent->children.push_back(new_tree); // add the new tree pointer to the children of the parent of leaf node
-
-    new_tree->corrBCC->prodAncestors = leaf_node->corrBCC->prodAncestors; // the product of the ancestors of the root is equal to the one of the old leaf node
-
-    vector<bool> already_initialized;
-    already_initialized.resize(decomposed_BCC.size(), false);
-    already_initialized[find_root-decomposed_BCC.begin()] = true; // mark root as initialized
-    mptnode* newBCC;
-    for (int i = 0; i < decomposed_BCC.size(); i++){
-        if(!already_initialized[i]){
-            newBCC = new mptnode;
-            newBCC->corrID = decomposed_BCC[i]->myID;
-            newBCC->corrBCC = decomposed_BCC[i];
-            newBCC->parent = NULL;
-            newBCC->children = {};
+    if(DEBUG){
+        cout << "BCC found are: "<<  endl;
+        for (int i = 0; i < decomposed_BCC.size(); i++){
+            cout << "B_"  << i << ": ";
+            printBCC(decomposed_BCC[i]);
         }
     }
-    
 
-    // recall to differentiate whether the sources are one or more to remove/add stuff to leaves and nodes
-    // NEED TO STILL REMOVE LEAF NODE FROM MEMORY, AND AS CHILD OF ITS PARENT IF NEED BE
-    
+    return;
 }
 
 
@@ -548,27 +634,27 @@ int main(int argc, char** argv) {
     #endif
 
 
-
-    cout << "Original graph: " << endl<<flush;
-    for(auto x : mptree->corrBCC->nodes){
-        cout << x << ": ";
-        for(auto y : mptree->corrBCC->edges[x]){
-            cout << y << " ";
+    if(DEBUG){
+        cout << "Original graph: " << endl<<flush;
+        for(auto x : mptree->corrBCC->nodes){
+            cout << x << ": ";
+            for(auto y : mptree->corrBCC->edges[x]){
+                cout << y << " ";
+            }
+            cout << endl;
         }
-        cout << endl;
     }
 
 
     // cout << "Expanding with respect to source s="<< s << endl;
     explode(mptree);
+    
 
     // cout << endl << "Found " << mptree.size() << " biconnected components:" << endl; 
 
-    // for (int i = 0; i < all_tree_nodes.size(); i++)
-    // {
-    //     cout << "B_"  << i << ": ";
-    //     printBCC(* all_tree_nodes[i]);
-    // }
+    printMPtree(mptree);
+
+    delete_all(mptree);
 
     return 0;
 }
