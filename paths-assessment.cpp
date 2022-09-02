@@ -12,8 +12,8 @@ uint64_t timeMs() {
   return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
-// #define DEBUG true
-#define DEBUG false
+#define DEBUG true
+// #define DEBUG false
 #define RANDOM_NODE_EXTRACTION
 
 using namespace std;
@@ -112,7 +112,7 @@ void create_graph(char* filename)
     // for(int i=0; i<M; i++)
     while(fscanf(input_graph,"%d %d",&u, &v) != EOF)
     {
-        // if(DEBUG) cout << "Considering pair " << u << " " << v << endl;
+        if(DEBUG) cout << "Considering pair " << u << " " << v << endl;
         // make sure no self-loops or multiedges are created 
         if (u != v && find(G->edges[u].begin(), G->edges[u].end(), v) == G->edges[u].end()){
             G->edges[u].push_back(v);
@@ -125,11 +125,11 @@ void create_graph(char* filename)
 
     fclose(input_graph);
 
-    G->personalBound = G->num_edges - G->nodes.size() + 1;
+    // G->personalBound = G->num_edges - G->nodes.size() + 1;// NO!!! ONLY TRUE IF BICONNECTED
 
     // tree_leaves.push_back(G); // initialize the leaf nodes and all nodes
     // all_tree_nodes.push_back(G);
-    running_bound = G->personalBound;
+    // running_bound = G->personalBound;
 
     // initialize multisource paths tree as single G
     mptree = new mptnode; 
@@ -200,7 +200,7 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
     disc[u] = low[u] = ++visit_time; // Initialize discovery time and lowpoint value
     
     // if(DEBUG) { cout << "Edges incident to " << u << " are: ";
-    // for (auto inc : B.edges[u])
+    // for (auto inc : B->edges[u])
     // {
     //     cout << inc << " ";
     // }
@@ -214,26 +214,31 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
             parent[v] = u;
             children++;
             findBCCs(v, B, BCC_vector, source_neighbors, og_multiplicity);
-
+            // if (DEBUG) cout << "Exited from recursive call for " << v << endl;
+            // if (DEBUG) cout << "Values at this point: low[u]=" << low[u] << ", low[v]=" << low[v] << ", parent[u] =" << parent[u] << ", disc[u] =" << disc[u]<< endl;
+            
             // Check if the subtree rooted with v has a connection to one of the ancestors of u
             low[u] = min(low[u], low[v]);
 
             // if u is not root and low value of one of its child is more than discovery value of u, 
             // OR if u is the root (returning from a child of the root identifies a BCC), then we close a BCC
             if ((parent[u] != -1 && low[v] >= disc[u]) || parent[u] == -1){ // here is where I close my articulation point
-                BCC* current_BCC;
+                if(DEBUG) {
+                    cout << "Closing art point " << u << " because of " << v << endl;
+                    cout << "Current stack: ";
+                    for (auto ss : tree_stack)
+                        cout << ss << " ";
+                    cout << endl;
+                }
+
+                BCC* current_BCC = new BCC;
                 current_BCC->target = u; // u is the target of the current BCC
+                current_BCC->nodes = {};
                 current_BCC->nodes.push_back(u);
                 is_art_point[u] = true;
                 times_art_point[u]++;
-
-                if(DEBUG) {cout << "Closing art point " << u << " because of " << v << endl;
-                cout << "Current stack: ";
-                for (auto ss : tree_stack)
-                    cout << ss << " ";
-                cout << endl;}
                 
-                if(DEBUG) {cout << "Current art points: ";
+                if(DEBUG) {cout << "Current art points: "<<flush;
                 for(int i = 0; i < is_art_point.size(); i++)
                 {
                     if(is_art_point[i])
@@ -245,7 +250,15 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 int x = tree_stack.back();
                 while(x != v){ // If we are in the "right" BCC add it to the vector   
                     current_BCC->nodes.push_back(x);
-                    if(DEBUG) cout << "Adding node " << x << " to current BCC"<< endl;
+                    // if(DEBUG) cout << "Adding node x=" << x << " to current BCC"<< endl;
+
+                    // if (DEBUG){
+                    //     cout << "Stack is: ";
+                    //     for (auto stack_el : tree_stack)
+                    //         cout << stack_el << " ";
+                    //     cout << endl;
+                    // }
+                    
                     
                     // multiplicity of the node is -1 if it is an art point; otherwise it is the multiplicity
                     // of the just-removed source summed to the possible multiplicity x could have, if it was a source of B
@@ -276,7 +289,7 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 if(x!= v) // always finish at v
                     throw logic_error("Destacked more than what we should have");
 
-                if(DEBUG) cout << "Adding node " << v << " to current BCC"<< endl;
+                // if(DEBUG) cout << "Adding node v=" << v << " to current BCC"<< endl;
                 
                 // multiplicity of the node is -1 if it is an art point; otherwise it is the multiplicity
                 // of the just-removed source summed to the possible multiplicity v could have, if it was a source of B
@@ -351,21 +364,25 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
 // INPUT: BCC newB that has been exploded into decomposed_BCC vector of BCC, pointer to the root of the new tree for this vector of BCC and to node_to_replace, node of the tree to be replaced with the new subtree
 // OUTPUT: Creates the full multisource paths tree for decomposed_BCC with root new_tree, also filling the corresponding prodAncestor bounds and adding leaves to leaf vector 
 void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_replace){
+    if(DEBUG) cout << "updating BCC with ID " << newB->myID << "; it has target " << newB->target << endl;
+    if(DEBUG) cout << "Corresponding node to replace is the correct one? " << (node_to_replace->corrBCC == newB) << "; it has target " << node_to_replace->corrBCC->target << endl;
     int final_target = newB->target;
     vector<BCC*>::iterator find_root = find_if(decomposed_BCC.begin(), decomposed_BCC.end(), [&final_target](const BCC* comp){return comp->target == final_target;});
     if(find_root == decomposed_BCC.end())
         throw logic_error("Error when exploding: cannot find component containing target");
 
-    mptnode* new_subtree;
+    mptnode* new_subtree =  new mptnode;
     new_subtree->corrBCC = *find_root;
     new_subtree->corrID = (*find_root)->myID;
     new_subtree->children = {};
+
+    // if(DEBUG) cout << "New subtree corresponds to BCC with ID " << new_subtree->corrID << endl;
 
     new_subtree->parent = node_to_replace->parent; // attach new tree to the parent of the leaf we exploded
     if(new_subtree->parent != NULL) // note: the node could have been the root of the tree
         node_to_replace->parent->children.push_back(new_subtree); // add the new tree pointer to the children of the parent of leaf node
 
-    if(new_subtree->parent == NULL && new_subtree->corrBCC->target != t)
+    if(new_subtree->parent == NULL && node_to_replace->corrBCC->target != t)
         throw logic_error("Root of the multisource paths tree does not contain target");
 
     new_subtree->corrBCC->prodAncestors = node_to_replace->corrBCC->prodAncestors; // the product of the ancestors of the root is equal to the one of the old leaf node
@@ -381,7 +398,7 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
                 auto end = decomposed_BCC.end();
                 while (i!=end)
                 {
-                    i = find_if(i, end, [&](const BCC* comp){comp->target == spair.first;});
+                    i = find_if(i, end, [&](const BCC* comp){return comp->target == spair.first;});
                     if(i!= end){ // in this case, we found a component which has target equal to the current source of current_node
                         // create a new node attached to current_node, push it to the tree_nodes_stack, and update the corresponding prodAncestors bound accordingly
                         new_node = new mptnode;
@@ -476,6 +493,7 @@ void explode(mptnode* leaf_node){
     // remove s from nodes, incident edges of s from edges
     newB->nodes.erase(find(newB->nodes.begin(), newB->nodes.end(), sB));
     vector<int> source_neighbors = newB->edges[sB]; // save neighbors of s for later
+
     newB->edges.erase(newB->edges.find(sB));
     for (auto neigh: source_neighbors) // also delete from neighbors' list
         newB->edges[neigh].erase(find(newB->edges[neigh].begin(), newB->edges[neigh].end(), sB));
@@ -523,7 +541,7 @@ void explode(mptnode* leaf_node){
             cout << endl;
         }
 
-        BCC* current_BCC;
+        BCC* current_BCC = new BCC;
         current_BCC->target = newB->target; // B.target is the target of the current BCC
 
         // for the current BCC we need to unstack until the stack is empty
@@ -593,7 +611,7 @@ void explode(mptnode* leaf_node){
 
     // need to build tree and update prodAncestors fields 
     mptnode* new_subtree; // this is a pointer to the root of the new tree; the root corresponds to the only component holding newB->target as target
-    update_tree(newB, decomposed_BCC, node_to_replace);
+    update_tree(newB, decomposed_BCC, node_to_replace); // MISSING: UPDATE RUNNING BOUND!!!!!
     
 
     if(DEBUG){
@@ -603,6 +621,7 @@ void explode(mptnode* leaf_node){
             printBCC(decomposed_BCC[i]);
         }
     }
+
 
     return;
 }
