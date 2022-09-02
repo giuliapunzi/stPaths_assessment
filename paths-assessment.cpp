@@ -166,7 +166,8 @@ void create_graph(char* filename)
 
     mptree->children.push_back(Gnode);
 
-    tree_leaves.push_back(Gnode); // initialize the good leaves as the root of the tree
+    // do not initialize tree_leaves as G will be immediately exploded
+    // tree_leaves.push_back(Gnode); // initialize the good leaves as the root of the tree
 
     return;
 }
@@ -199,7 +200,7 @@ void printBCC(BCC* B){
 }
 
 // print all my children, then endl and myself
-void printMPtree(mptnode * tree_node){
+void printTreeNodes(mptnode * tree_node){
     cout << tree_node->corrID << "-> "; 
     for (auto child : tree_node->children){
         cout << child->corrID << " ";
@@ -207,10 +208,34 @@ void printMPtree(mptnode * tree_node){
     cout << endl;
 
     for (auto child : tree_node->children){
-        printMPtree(child);    
+        printTreeNodes(child);    
     }
 
     return;
+}
+
+void printTreeComponents(mptnode * tree_node){
+    printBCC(tree_node->corrBCC);
+
+    for (auto child : tree_node->children){
+        printTreeComponents(child);    
+    }
+
+    return;
+}
+
+void printMPtree(mptnode * tree_node){
+    printTreeNodes(tree_node);
+    cout << "Where the components are: "<< endl;
+    printTreeComponents(tree_node);    
+
+    return;
+}
+
+// delete a single mptnode
+void inline delete_mptnode(mptnode* tree_node){
+    delete tree_node->corrBCC;
+    delete tree_node;
 }
 
 // delete all data structures for the algorithm
@@ -576,6 +601,9 @@ void explode(mptnode* leaf_node){
         node_to_replace->corrBCC = newB;
         node_to_replace->children = {};
         node_to_replace->parent = leaf_node->parent;
+
+        // also need to add it as child of leaf_node parent
+        node_to_replace->parent->children.push_back(node_to_replace);
     }
     // now newB, node_to_replace hold the correct graph to modify
 
@@ -734,6 +762,92 @@ void explode(mptnode* leaf_node){
 }
 
 
+bool assess_paths(mptnode* current_node){
+    while (running_bound < z){
+        // if we are at the root of the tree, we are done
+        if(current_node == mptree){
+            if(tree_leaves.size() == 0){
+                running_bound = current_node->corrBCC->bound_multiplier;
+                return running_bound >= z;
+            }
+            else{ // pick another leaf
+                while (current_node == mptree)
+                {
+                    // choose the next current node at random from the leaves
+                    int leaf_index = rand() % tree_leaves.size();
+                    current_node = tree_leaves[leaf_index];
+                    tree_leaves.erase(tree_leaves.begin() + leaf_index);
+                }
+                
+            }
+        }
+
+        // if we are at a trivial component, go on by bringing the multiplicity to the parent component
+        if(current_node->corrBCC->nodes.size() == 2){
+            if(DEBUG) cout << "Considering trivial component with ID="<< current_node->corrID << endl; 
+            if(DEBUG) cout << "It has "<< current_node->corrBCC->nodes.size() << " nodes" << endl; 
+            if(current_node->corrBCC->bound_multiplier != current_node->corrBCC->sources[0].second)
+                throw logic_error("The bound multiplier of a trivial BCC is different from its source multiplicity");
+
+            if(current_node->corrBCC->sources.size() > 1)
+                throw logic_error("A trivial BCC has more than one source: impossible!");
+
+            mptnode* parent_node = current_node->parent;
+            parent_node->corrBCC->bound_multiplier += current_node->corrBCC->bound_multiplier; // increase the bound multiplier of the parent
+            vector<pair<int,int>> parent_sources = parent_node->corrBCC->sources;
+            auto find_source = find_if(parent_sources.begin(), parent_sources.end(), [&](const pair<int, int> p){return p.first == current_node->corrBCC->target;});
+            
+            if(find_source == parent_sources.end())
+                throw logic_error("Parent of current node does not have its target as a source");
+            
+            int source_index = find_source-parent_node->corrBCC->sources.begin();
+            
+            if(parent_sources[source_index].second == -1) // if the source is only an articulation point, set its multiplicity to the bound multiplier of the current node
+                parent_node->corrBCC->sources[source_index].second = current_node->corrBCC->bound_multiplier; 
+            else // otherwise, sum to its multiplicity the bound multiplier of the current node
+                parent_node->corrBCC->sources[source_index].second += current_node->corrBCC->bound_multiplier; 
+
+            // now we need to set the parent as a leaf, if it wasn't already, and delete the old current_node
+            if(!parent_node->corrBCC->isLeaf){
+                parent_node->corrBCC->isLeaf = true;
+                tree_leaves.push_back(parent_node);
+            }
+
+            auto curr_child = find(parent_node->children.begin(), parent_node->children.end(),current_node);
+            parent_node->children.erase(curr_child);
+            delete_mptnode(current_node);
+            
+            // take parent node as current if it is not the root, otherwise extract at random
+            if(parent_node!= mptree)
+                current_node = parent_node;
+            else{
+                // choose the next current node at random from the leaves
+                int leaf_index = rand() % tree_leaves.size();
+                current_node = tree_leaves[leaf_index];
+                tree_leaves.erase(tree_leaves.begin() + leaf_index);
+            }
+        }
+        else{ // here we have a current node with at least three nodes = worth expanding
+            if(DEBUG) cout << "Considering component with ID="<< current_node->corrID << endl; 
+            
+            explode(current_node);
+
+            if(DEBUG){
+                printMPtree(mptree);
+                cout << endl;
+            }
+
+            // choose the next current node at random from the leaves
+            int leaf_index = rand() % tree_leaves.size();
+            current_node = tree_leaves[leaf_index];
+            tree_leaves.erase(tree_leaves.begin() + leaf_index);
+        }
+
+        cout << "Updated running bound: "<< running_bound <<endl;
+    }
+
+    return true; // exited while bound < z
+}
 
 int main(int argc, char** argv) { 
     if(argc < 5){
@@ -772,16 +886,20 @@ int main(int argc, char** argv) {
         }
     }
 
-    // We need to start with a BCC computation 
-
-
-    cout << "Starting running bound: "<< running_bound << endl;
-    explode(graph_node);
+    // cout << "Starting running bound: "<< running_bound << endl;
+    // explode(graph_node);
     
-    printMPtree(mptree);
-    cout << endl;
+    // printMPtree(mptree);
+    // cout << endl;
 
-    cout << "Ending running bound: "<< running_bound <<endl;
+    // cout << "Ending running bound: "<< running_bound <<endl;
+
+    bool enough = assess_paths(graph_node);
+
+    if(enough)
+        cout << "The paths are at least z=" << z << endl;
+    else    
+        cout << "The paths are exactly " << running_bound << " < z=" << z << endl;
 
     delete_all(mptree);
 
