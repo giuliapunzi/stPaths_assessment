@@ -23,7 +23,7 @@ int maxID = 0; // maximum ID of a BCC
 int s, t; // original source and target for st-paths problem
 int z; // value to assess for
 long MAX_TIME;
-unsigned long running_bound = 1;
+unsigned long running_bound = 0;
 
 // ----------- global vectors for findBCCs
 vector<bool> visited;
@@ -40,7 +40,6 @@ struct BCC {
     vector<pair<int,int>> sources; // vector of paths' sources contained in the BCC. Multiplicity will be -1 for sources which are ONLY art points 
     int target; // target of the BCC = only articulation point leading to t 
     long personalBound; // personal bound of current BCC = |edges| - |nodes| + 1
-    int bound_multiplier; // multiplier given by the number of sources and their multiplicity; this influences the whole leaf-to-root path
     long prodAncestors; // product of the personal bounds of all BCCs in the bead string from current to root
     int myID; // personal ID of the BCC
     bool isLeaf; // true iff the BCC is a leaf of the block-cut tree
@@ -68,9 +67,7 @@ mptnode* mptree; // global structure; this is a pointer to the root of the multi
 // vector<BCC*> tree_leaves; // vector of pointers to BCC leaves of the multisource paths tree  
 // vector<BCC*> all_tree_nodes; // all the BCCs composing the multisource paths tree
 
-long inline leaf_to_root_bound(mptnode* tree_node){
-    return tree_node->corrBCC->personalBound*tree_node->corrBCC->prodAncestors*tree_node->corrBCC->bound_multiplier;
-}
+
 
 // create graph from NDE file filename (WE REMOVE MULTI-EDGES AND SELF LOOPS)
 void create_graph(char* filename)
@@ -100,7 +97,6 @@ void create_graph(char* filename)
     G->target = t;
     G->personalBound = 1;
     G->prodAncestors = 1;
-    G->bound_multiplier = 1;
     G->myID = maxID++;
     G->isLeaf = true;
     G->num_edges = 0;
@@ -116,7 +112,7 @@ void create_graph(char* filename)
     // for(int i=0; i<M; i++)
     while(fscanf(input_graph,"%d %d",&u, &v) != EOF)
     {
-        // if(DEBUG) cout << "Considering pair " << u << " " << v << endl;
+        if(DEBUG) cout << "Considering pair " << u << " " << v << endl;
         // make sure no self-loops or multiedges are created 
         if (u != v && find(G->edges[u].begin(), G->edges[u].end(), v) == G->edges[u].end()){
             G->edges[u].push_back(v);
@@ -135,42 +131,26 @@ void create_graph(char* filename)
     // all_tree_nodes.push_back(G);
     // running_bound = G->personalBound;
 
-
-    // ADD NEW DUMMY NODE AND BUILD THE TREE
-    BCC* dummyBCC = new BCC;
-    dummyBCC->sources = {make_pair(t, 1)};
-    dummyBCC->target = N;
-    dummyBCC->personalBound = 1;
-    dummyBCC->bound_multiplier = 1;
-    dummyBCC->prodAncestors = 1;
-    dummyBCC->myID = -1;
-    dummyBCC->nodes = {t, N};
-    dummyBCC->edges[t].push_back(N);
-    dummyBCC->edges[N].push_back(t);    
-    dummyBCC->num_edges = 1;
-    
-    t = N;
-
-    // initialize multisource paths tree as dummy root with single child G 
-    mptree = new mptnode; 
-    mptree->corrBCC = dummyBCC;
-    mptree->corrID = dummyBCC->myID;
-    mptree->parent = NULL;
-    mptree->children = {};
-
+    // initialize multisource paths tree as root node with single child G
     mptnode* Gnode = new mptnode;
     Gnode->corrBCC = G;
     Gnode->corrID = G->myID;
     Gnode->parent = mptree;
     Gnode->children = {};
 
-    mptree->children.push_back(Gnode);
+    mptree = new mptnode; 
+    mptree->corrBCC = NULL;
+    mptree->corrID = -1;
+    mptree->parent = NULL;
+    mptree->children = {Gnode};
+
 
     tree_leaves.push_back(Gnode); // initialize the good leaves as the root of the tree
 
     return;
 }
  
+
 
 void printBCC(BCC* B){
     cout << "\tGraph: ";
@@ -184,7 +164,6 @@ void printBCC(BCC* B){
     cout << endl;
     cout << "\tPersonal bound: " << B->personalBound << endl;
     cout << "\tProduct of ancestors: " << B->prodAncestors << endl;
-    cout << "\tBound multiplier: " << B->bound_multiplier << endl;
     cout << "\tID: " << B->myID << endl;
     cout << "\tSources: ";
     for(auto ss : B->sources)
@@ -200,15 +179,11 @@ void printBCC(BCC* B){
 
 // print all my children, then endl and myself
 void printMPtree(mptnode * tree_node){
-    cout << tree_node->corrID << "-> "; 
     for (auto child : tree_node->children){
-        cout << child->corrID << " ";
+        printMPtree(child);
+        cout << endl;    
     }
-    cout << endl;
-
-    for (auto child : tree_node->children){
-        printMPtree(child);    
-    }
+    cout << tree_node->corrID << " ";
 
     return;
 }
@@ -283,7 +258,7 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 int x = tree_stack.back();
                 while(x != v){ // If we are in the "right" BCC add it to the vector   
                     current_BCC->nodes.push_back(x);
-                    if(DEBUG) cout << "Adding node x=" << x << " to current BCC"<< endl;
+                    // if(DEBUG) cout << "Adding node x=" << x << " to current BCC"<< endl;
 
                     // if (DEBUG){
                     //     cout << "Stack is: ";
@@ -322,7 +297,7 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 if(x!= v) // always finish at v
                     throw logic_error("Destacked more than what we should have");
 
-                if(DEBUG) cout << "Adding node v=" << v << " to current BCC"<< endl;
+                // if(DEBUG) cout << "Adding node v=" << v << " to current BCC"<< endl;
                 
                 // multiplicity of the node is -1 if it is an art point; otherwise it is the multiplicity
                 // of the just-removed source summed to the possible multiplicity v could have, if it was a source of B
@@ -366,27 +341,13 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 }
                 current_BCC->num_edges = current_BCC->num_edges/2;
                 // PERSONAL BOUND MUST BE CYCLOMATIC MULTIPLIED FOR THE NUMBER OF "VALID" SOURCES = NOT CONTAINING -1
-                // int cyclomatic_bound = current_BCC->num_edges - current_BCC->nodes.size() + 1; // initialize personal bound
-                current_BCC->personalBound = current_BCC->num_edges - current_BCC->nodes.size() + 1; 
-
-                if(current_BCC->nodes.size() == 2) current_BCC->personalBound = 1;
-
-                bool only_art_pts = true;
-                
-                if(DEBUG) cout << "Number of nodes in this BCC is " << current_BCC->nodes.size()<<endl;
+                int cyclomatic_bound = current_BCC->num_edges - current_BCC->nodes.size() + 1; // initialize personal bound
                 // current_BCC->personalBound = cyclomatic_bound;
                 for (auto spair : current_BCC->sources)
                 {
-                    if(spair.second != -1){
-                        only_art_pts = false;
-                        // current_BCC->personalBound += cyclomatic_bound*spair.second;
-                        current_BCC->bound_multiplier += spair.second;
-                    }
+                    if(spair.second != -1)
+                        current_BCC->personalBound += cyclomatic_bound*spair.second;
                 }
-
-                // if(only_art_pts) current_BCC->personalBound = cyclomatic_bound;
-
-                if(DEBUG) cout << "Personal bound is " << current_BCC->personalBound <<endl;
 
                 // also, set up if it is a leaf: that is, if it ONLY has sources with multiplicity > 0, that is, they are neighbors of the source
                 if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [](const pair<int, int>& p){return p.second == -1;}) == current_BCC->sources.end())
@@ -414,7 +375,6 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
     // if(DEBUG) cout << "Updating BCC with ID " << newB->myID << "; it has target " << newB->target << endl;
     // if(DEBUG) cout << "Corresponding node to replace is the correct one? " << (node_to_replace->corrBCC == newB) << "; it has target " << node_to_replace->corrBCC->target << endl;
     int final_target = newB->target;
-    int og_leaves = tree_leaves.size(); // save for latervector<mptnode*> root_nodes; // roots of the new subtree
     vector<mptnode*> root_nodes; // roots of the new subtree
     vector<mptnode*> tree_nodes_stack;
     mptnode* new_subtree;
@@ -434,11 +394,8 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
             new_subtree->corrID = (*find_root)->myID;
             new_subtree->children = {};
             new_subtree->parent = node_to_replace->parent; // attach new tree to the parent of the leaf we exploded
-            new_subtree->parent->children.push_back(new_subtree);
-
-            if(DEBUG) cout << "Just attached root of new tree with ID " << new_subtree->corrID << " to parent with ID " << new_subtree->parent->corrID << endl;
             
-            if(new_subtree->parent == mptree && node_to_replace->parent->corrBCC->target != t)
+            if(new_subtree->parent == mptree && node_to_replace->corrBCC->target != t)
                 throw logic_error("Root of the multisource paths tree does not contain target");
 
             new_subtree->corrBCC->prodAncestors = node_to_replace->corrBCC->prodAncestors; // the product of the ancestors of the root is equal to the one of the old leaf node
@@ -451,8 +408,16 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
             find_root++;
         }
     }  
+    
+    if(DEBUG){
+        cout << "BCC IDs are: ";
+        for (auto cc : decomposed_BCC){
+            cout << cc->myID << " ";
+        }
+        cout << endl;
+    }
 
-    // vector<mptnode*> tree_nodes_stack = {new_subtree};
+    
     mptnode *current_node, *new_node;
     while (!tree_nodes_stack.empty()){
         current_node = tree_nodes_stack.back();
@@ -474,10 +439,6 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
                         new_node->corrID = new_node->corrBCC->myID;
                         new_node->parent = current_node;
                         current_node->children.push_back(new_node);
-                        if(DEBUG){
-                            cout << "current node prod ancestors: " << current_node->corrBCC->prodAncestors<<endl;
-                            cout << "current node personal bound: " << current_node->corrBCC->personalBound<<endl;
-                        }
                         new_node->corrBCC->prodAncestors = current_node->corrBCC->prodAncestors*current_node->corrBCC->personalBound;
 
                         tree_nodes_stack.push_back(new_node);
@@ -495,29 +456,21 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
 
     // if(DEBUG) cout << "Finished filling new tree" << endl;
 
-    // new subtree is already attached to node_to_replace; we just need to remove the latter altogether
-    if(new_subtree->parent != NULL){
-        if(DEBUG) cout << "new subtree has non-NULL parent" << endl;
+    // any new root node is already attached to node_to_replace; we just need to remove the latter altogether
+    if(root_nodes[0]->parent != NULL){
+        if(DEBUG) cout << "New root has non-NULL parent" << endl;
         auto child_iterator = find(node_to_replace->parent->children.begin(), node_to_replace->parent->children.end(), node_to_replace);
         if(child_iterator == node_to_replace->parent->children.end())
             throw logic_error("Parent of node to replace does not have him as one of its children");
         node_to_replace->parent->children.erase(child_iterator); // remove the node as a child of its parent
     }
     else{ // if we were at the root, we need to assign mptree to the root of the new subtree
-        // mptree = new_subtree;
+        mptree = new_subtree;
     }
 
     if(node_to_replace->children.size()!= 0) // extra check
         throw logic_error("Node to replace has children");
 
-
-    // UPDATE RUNNING BOUND
-    // 1) remove leaf-to-root contribution of node_to_replace
-    running_bound -= leaf_to_root_bound(node_to_replace); // note: at beginning, running is 1 and so is the leaf to root of the single node
-    // 2) add contributions of all leaves to it 
-    for (auto i = og_leaves; i < tree_leaves.size(); i++) // only iterates on the new leaves = the ones of the new subtree
-        running_bound += leaf_to_root_bound(tree_leaves[i]);
-    
     // remove the full node and its BCC
     delete node_to_replace->corrBCC;
     delete node_to_replace;
@@ -618,6 +571,16 @@ void explode(mptnode* leaf_node){
     // start visit from target of BCC (we first close BCCs that contain neighbors of s)
     vector<BCC*> decomposed_BCC = {}; // DO WE ALSO NEED TO BUILD A VECTOR OF TREE NODES???
     findBCCs(newB->target, newB, decomposed_BCC, source_neighbors, og_multiplicity);
+    int og_leaves_size = tree_leaves.size(); // recall the size before adding new leaves
+
+
+    if(DEBUG){
+        cout << "BCC found are: "<<  endl;
+        for (int i = 0; i < decomposed_BCC.size(); i++){
+            cout << "B_"  << i << ": ";
+            printBCC(decomposed_BCC[i]);
+        }
+    }
 
     // after call for art points, IF STACK IS NONEMPTY finish unstacking and form last new BCC
     // note: by non-empty we mean at least two elements, as if t is an articulation point then it must remain in the stack
@@ -679,24 +642,13 @@ void explode(mptnode* leaf_node){
         current_BCC->num_edges = current_BCC->num_edges/2;
 
         // PERSONAL BOUND MUST BE CYCLOMATIC MULTIPLIED FOR THE NUMBER OF "VALID" SOURCES = NOT CONTAINING -1
-        // int cyclomatic_bound = current_BCC->num_edges - current_BCC->nodes.size() + 1; // initialize personal bound
-        current_BCC->personalBound = current_BCC->num_edges - current_BCC->nodes.size() + 1; 
-        if(current_BCC->nodes.size() == 2) current_BCC->personalBound = 1;
-
-        bool only_art_pts = true;
-        
-        if(DEBUG) cout << "Number of nodes in this BCC is " << current_BCC->nodes.size()<<endl;
+        int cyclomatic_bound = current_BCC->num_edges - current_BCC->nodes.size() + 1; // initialize personal bound
         // current_BCC->personalBound = cyclomatic_bound;
         for (auto spair : current_BCC->sources)
         {
-            if(spair.second != -1){
-                only_art_pts = false;
-                // current_BCC->personalBound += cyclomatic_bound*spair.second;
-                current_BCC->bound_multiplier += spair.second;
-            }
+            if(spair.second != -1)
+                current_BCC->personalBound += cyclomatic_bound*spair.second;
         }
-
-        // if(only_art_pts) current_BCC->personalBound = cyclomatic_bound;
         
 
         // also, set up if it is a leaf: that is, if it ONLY has sources with multiplicity > 0, that is, they are neighbors of the source
@@ -706,15 +658,6 @@ void explode(mptnode* leaf_node){
 
         // add the BCC to the final vector
         decomposed_BCC.push_back(current_BCC);
-    }
-
-    
-    if(DEBUG){
-        cout << "BCC found are: "<<  endl;
-        for (int i = 0; i < decomposed_BCC.size(); i++){
-            cout << "B_"  << i << ": ";
-            printBCC(decomposed_BCC[i]);
-        }
     }
 
     // need to build tree and update prodAncestors fields 
@@ -759,29 +702,24 @@ int main(int argc, char** argv) {
         srand(time(NULL));
     #endif
 
-    mptnode* graph_node = mptree->children[0];
 
     if(DEBUG){
         cout << "Original graph: " << endl<<flush;
-        for(auto x : graph_node->corrBCC->nodes){
+        for(auto x : mptree->corrBCC->nodes){
             cout << x << ": ";
-            for(auto y : graph_node->corrBCC->edges[x]){
+            for(auto y : mptree->corrBCC->edges[x]){
                 cout << y << " ";
             }
             cout << endl;
         }
     }
 
-    // We need to start with a BCC computation 
 
-
-    cout << "Starting running bound: "<< running_bound << endl;
-    explode(graph_node);
+    // cout << "Expanding with respect to source s="<< s << endl;
+    explode(mptree);
     
     printMPtree(mptree);
     cout << endl;
-
-    cout << "Ending running bound: "<< running_bound <<endl;
 
     delete_all(mptree);
 
