@@ -62,6 +62,7 @@ struct mptnode {
 
 
 vector<mptnode*> tree_leaves; // vector of pointers to leaves of the multisource paths tree  
+vector<mptnode*> tree_semi_leaves; // vector of pointers to nodes of mptree whose corresponding BCC is a leaf (i.e. at least one non-art point leaf), needed for bound update
 mptnode* mptree; // global structure; this is a pointer to the root of the multi-source paths tree
 
 
@@ -230,6 +231,22 @@ void printMPtree(mptnode * tree_node){
     printTreeComponents(tree_node);    
 
     return;
+}
+
+void printLeaves(){
+    cout << "IDs of current leaves: ";
+    for (auto tnode : tree_leaves)
+        cout << tnode->corrID << " ";
+    
+    cout << endl;
+}
+
+void printSemiLeaves(){
+    cout << "IDs of current semi-leaves: ";
+    for (auto tnode : tree_semi_leaves)
+        cout << tnode->corrID << " ";
+    
+    cout << endl;
 }
 
 // delete a single mptnode
@@ -439,7 +456,8 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
     // if(DEBUG) cout << "Updating BCC with ID " << newB->myID << "; it has target " << newB->target << endl;
     // if(DEBUG) cout << "Corresponding node to replace is the correct one? " << (node_to_replace->corrBCC == newB) << "; it has target " << node_to_replace->corrBCC->target << endl;
     int final_target = newB->target;
-    int og_leaves = tree_leaves.size(); // save for latervector<mptnode*> root_nodes; // roots of the new subtree
+    int og_leaves = tree_leaves.size(); // save for later vector<mptnode*> root_nodes; // roots of the new subtree
+    int og_semi_leaves = tree_semi_leaves.size();
     vector<mptnode*> root_nodes; // roots of the new subtree
     vector<mptnode*> tree_nodes_stack;
     mptnode* new_subtree;
@@ -531,6 +549,10 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
             tree_leaves.push_back(current_node);
             if(DEBUG) cout << "Size of tree leaves: " << tree_leaves.size() << endl;
         }
+
+        if(children_count > 0 && current_node->corrBCC->isLeaf) { // if the corresponding BCC is leaf but it is not an actual tree leaf, then current node is a semi-leaf of the tree
+            tree_semi_leaves.push_back(current_node);
+        }
     }
 
     // if(DEBUG) cout << "Finished filling new tree" << endl;
@@ -557,6 +579,9 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
     // 2) add contributions of all leaves to it 
     for (auto i = og_leaves; i < tree_leaves.size(); i++) // only iterates on the new leaves = the ones of the new subtree
         running_bound += leaf_to_root_bound(tree_leaves[i]);
+    
+    for (auto i = og_semi_leaves; i < tree_semi_leaves.size(); i++) // only iterates on the new semi leaves = the ones of the new subtree
+        running_bound += leaf_to_root_bound(tree_semi_leaves[i]);
     
     // remove the full node and its BCC
     delete node_to_replace->corrBCC;
@@ -631,7 +656,7 @@ void explode(mptnode* leaf_node){
         newB->edges[neigh].erase(find(newB->edges[neigh].begin(), newB->edges[neigh].end(), sB));
 
     if(DEBUG) {
-        cout << "Erased source; current graph is " << endl;
+        cout << "Erased source "<< sB << "; current graph is " << endl;
         for(auto x : newB->nodes){
             cout << x << ": ";
             for(auto y : newB->edges[x]){
@@ -779,6 +804,11 @@ void explode(mptnode* leaf_node){
 
 bool assess_paths(mptnode* current_node){
     while (running_bound < z){
+        if(DEBUG){
+            printLeaves();
+            printSemiLeaves();
+        }
+
         // if we are at the root of the tree, we are done
         if(current_node == mptree){
             if(tree_leaves.size() == 0){
@@ -828,6 +858,12 @@ bool assess_paths(mptnode* current_node){
                 tree_leaves.push_back(parent_node);
             }
 
+            // we also need to remove it from semi-leaves, if it belonged to them
+            auto semi_leaf_it = find(tree_semi_leaves.begin(), tree_semi_leaves.end(), parent_node);
+            if(semi_leaf_it != tree_semi_leaves.end()){
+                tree_semi_leaves.erase(semi_leaf_it);
+            }
+
             auto curr_child = find(parent_node->children.begin(), parent_node->children.end(),current_node);
             parent_node->children.erase(curr_child);
             delete_mptnode(current_node);
@@ -851,8 +887,6 @@ bool assess_paths(mptnode* current_node){
                 printMPtree(mptree);
                 cout << endl;
             }
-
-            cout << "tree leaves size is "<< tree_leaves.size() << endl<<flush;
 
             // choose the next current node at random from the leaves
             int leaf_index = rand() % tree_leaves.size();
