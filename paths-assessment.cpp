@@ -482,39 +482,54 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
     while (!tree_nodes_stack.empty()){
         current_node = tree_nodes_stack.back();
         tree_nodes_stack.pop_back();
-        if(!current_node->corrBCC->isLeaf){ // only explore children if the corresponding BCC is not a leaf
-            if (DEBUG) cout << "Considering non-leaf BCC with ID=" << current_node->corrBCC->myID << endl;
-            for (auto spair : current_node->corrBCC->sources){ // go through all sources of the component 
-                if (DEBUG) cout << "Considering source " << spair.first << endl;
-                auto i = decomposed_BCC.begin();
-                auto end = decomposed_BCC.end();
-                while (i!=end)
-                {
-                    i = find_if(i, end, [&](const BCC* comp){return comp->target == spair.first;});
-                    if(i!= end){ // in this case, we found a component which has target equal to the current source of current_node
-                        // create a new node attached to current_node, push it to the tree_nodes_stack, and update the corresponding prodAncestors bound accordingly
-                        if (DEBUG) cout << "Found BCC " << decomposed_BCC[i-decomposed_BCC.begin()]->myID << " to have target equal to "<< spair.first << endl;
-                        new_node = new mptnode;
-                        new_node->corrBCC = *i;
-                        new_node->corrID = new_node->corrBCC->myID;
-                        new_node->parent = current_node;
-                        current_node->children.push_back(new_node);
-                        if(DEBUG){
-                            cout << "current node prod ancestors: " << current_node->corrBCC->prodAncestors<<endl;
-                            cout << "current node personal bound: " << current_node->corrBCC->personalBound<<endl;
-                        }
-                        new_node->corrBCC->prodAncestors = current_node->corrBCC->prodAncestors*current_node->corrBCC->personalBound;
-
-                        tree_nodes_stack.push_back(new_node);
-                        if(DEBUG) cout << "Adding component with ID="<< new_node->corrID << " to the tree node stack "<< endl;
-                        i++;
-                    }
-                }  
+        if (DEBUG)
+        {
+            cout << "Considering component with ID " << current_node->corrID << endl;
+            cout << "Sources are: ";
+            for (auto spair : current_node->corrBCC->sources)
+            {
+                cout << "(" << spair.first << ", " <<spair.second << ")\t";
             }
+            cout << endl;
         }
-        else{ // if current node is indeed a leaf, add it to the leaf vector of tree nodes
+        
+        // if(!current_node->corrBCC->isLeaf){ // only explore children if the corresponding BCC is not a leaf
+        // if(find_if(current_node->corrBCC->sources.begin(), current_node->corrBCC->sources.end(), [&](const pair<int,int> p){return p.second == -1;}) == current_node->corrBCC->sources.end()){
+        //     if (DEBUG) cout << "Considering non-leaf BCC with ID=" << current_node->corrBCC->myID << endl;
+        int children_count = 0; // keep count of how many real sources
+        for (auto spair : current_node->corrBCC->sources){ // go through all sources of the component
+            if (DEBUG) cout << "Considering source " << spair.first << endl;
+            auto i = decomposed_BCC.begin();
+            auto end = decomposed_BCC.end();
+            while (i!=end)
+            {
+                i = find_if(i, end, [&](const BCC* comp){return comp->target == spair.first;}); // this handles possibility of not having any child with that target
+                if(i!= end){ // in this case, we found a component which has target equal to the current source of current_node
+                    // create a new node attached to current_node, push it to the tree_nodes_stack, and update the corresponding prodAncestors bound accordingly
+                    children_count++; // found a child
+                    if (DEBUG) cout << "Found BCC " << decomposed_BCC[i-decomposed_BCC.begin()]->myID << " to have target equal to "<< spair.first << endl;
+                    new_node = new mptnode;
+                    new_node->corrBCC = *i;
+                    new_node->corrID = new_node->corrBCC->myID;
+                    new_node->parent = current_node;
+                    current_node->children.push_back(new_node);
+                    if(DEBUG){
+                        cout << "current node prod ancestors: " << current_node->corrBCC->prodAncestors<<endl;
+                        cout << "current node personal bound: " << current_node->corrBCC->personalBound<<endl;
+                    }
+                    new_node->corrBCC->prodAncestors = current_node->corrBCC->prodAncestors*current_node->corrBCC->personalBound;
+
+                    tree_nodes_stack.push_back(new_node);
+                    if(DEBUG) cout << "Adding component with ID="<< new_node->corrID << " to the tree node stack "<< endl;
+                    i++;
+                }
+            }  
+        }
+        
+        if(children_count==0){ // if current node is indeed a leaf, add it to the leaf vector of tree nodes
             if (DEBUG) cout << "Found leaf node for component with ID=" << current_node->corrBCC->myID << endl;
             tree_leaves.push_back(current_node);
+            if(DEBUG) cout << "Size of tree leaves: " << tree_leaves.size() << endl;
         }
     }
 
@@ -536,7 +551,7 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
         throw logic_error("Node to replace has children");
 
 
-    // UPDATE RUNNING BOUND
+    // UPDATE RUNNING BOUND: PROBLEM AS WHEN WE HAVE BOTH AN ART POINT AND A SOURCE IT DOES NOT COUNT AS LEAF   
     // 1) remove leaf-to-root contribution of node_to_replace
     running_bound -= leaf_to_root_bound(node_to_replace); // note: at beginning, running is 1 and so is the leaf to root of the single node
     // 2) add contributions of all leaves to it 
@@ -828,7 +843,7 @@ bool assess_paths(mptnode* current_node){
             }
         }
         else{ // here we have a current node with at least three nodes = worth expanding
-            if(DEBUG) cout << "Considering component with ID="<< current_node->corrID << endl; 
+            if(DEBUG) cout << "Considering component with ID="<< current_node->corrID << endl<< flush; 
             
             explode(current_node);
 
@@ -836,6 +851,8 @@ bool assess_paths(mptnode* current_node){
                 printMPtree(mptree);
                 cout << endl;
             }
+
+            cout << "tree leaves size is "<< tree_leaves.size() << endl<<flush;
 
             // choose the next current node at random from the leaves
             int leaf_index = rand() % tree_leaves.size();
