@@ -891,7 +891,8 @@ bool assess_paths(mptnode* current_node){
                 return running_bound >= z;
             }
             else{ // pick another leaf
-                int leaf_index;
+                // this should be impossible; if the root is a leaf, then no more nodes must exist
+                throw logic_error("Root added as leaf when tree is non-empty");
                 while (current_node == mptree)
                 {
                     // choose the next current node at random from the leaves
@@ -901,13 +902,16 @@ bool assess_paths(mptnode* current_node){
             }
         }
 
+        // ---------------------------- THERE IS A PROBLEM HERE WITH TRIVIAL COMPONENTS -------------------------------
         // if we are at a trivial component, go on by bringing the multiplicity to the parent component
-        if(current_node->corrBCC->nodes.size() == 2){
+        if(current_node->corrBCC->nodes.size() == 2){ 
             if(DEBUG) cout << "Considering trivial component with ID="<< current_node->corrID << endl; 
             if(DEBUG){
                 printLeaves();
                 printSemiLeaves();
             }
+
+            if(DEBUG) cout << "Leaf index is " << leaf_index << endl;
 
             // if(DEBUG) cout << "It has "<< current_node->corrBCC->nodes.size() << " nodes" << endl; 
             if(current_node->corrBCC->bound_multiplier != current_node->corrBCC->sources[0].second)
@@ -966,11 +970,12 @@ bool assess_paths(mptnode* current_node){
                 current_node = parent_node;
             else{
                 // choose the next current node at random from the leaves
-                int leaf_index = rand() % tree_leaves.size();
+                leaf_index = rand() % tree_leaves.size();
                 current_node = tree_leaves[leaf_index];
                 // tree_leaves.erase(tree_leaves.begin() + leaf_index);
             }
         }
+        // -----------------------------------------------------------------------------------------
         else{ // here we have a current node with at least three nodes = worth expanding
             if(DEBUG) cout << "Considering component with ID="<< current_node->corrID << endl<< flush; 
             if(DEBUG){
@@ -986,7 +991,7 @@ bool assess_paths(mptnode* current_node){
             }
 
             // choose the next current node at random from the leaves
-            int leaf_index = rand() % tree_leaves.size();
+            leaf_index = rand() % tree_leaves.size();
             current_node = tree_leaves[leaf_index];
             // tree_leaves.erase(tree_leaves.begin() + leaf_index);
         }
