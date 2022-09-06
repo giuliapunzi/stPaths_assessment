@@ -12,8 +12,8 @@ uint64_t timeMs() {
   return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
-#define DEBUG true
-// #define DEBUG false
+// #define DEBUG true
+#define DEBUG false
 #define RANDOM_NODE_EXTRACTION
 
 using namespace std;
@@ -435,6 +435,7 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [](const pair<int, int>& p){return p.second == -1;}) == current_BCC->sources.end())
                     current_BCC->isLeaf = true;
 
+
                 // add the BCC to the final vector
                 BCC_vector.push_back(current_BCC);
             }
@@ -628,11 +629,12 @@ void explode(mptnode* leaf_node){
 
         if(parent_node->children.size() == 0){ // if leaf_node was the only child, then parent node becomes leaf node
             tree_leaves.push_back(parent_node);
+            parent_node->corrBCC->isLeaf = true; // set the corresponding BCC as a leaf
             if(is_semi_leaf != tree_semi_leaves.end()) // if it was also a semi-leaf, it must be removed from that vector
                 tree_semi_leaves.erase(is_semi_leaf);
         }       
         else{ // here it is surely a semi-leaf, so we add it to them if not already in the vector
-            if(is_semi_leaf == tree_semi_leaves.end()) // if it was also a semi-leaf, it must be removed from that vector
+            if(is_semi_leaf == tree_semi_leaves.end()) // if it was not a semi-leaf, it must become one 
                 tree_semi_leaves.push_back(parent_node);
         }
 
@@ -649,8 +651,13 @@ void explode(mptnode* leaf_node){
     if(DEBUG) cout << "Running bound decreased by " << leaf_to_root_bound(leaf_node) << " (contribution of leaf node)" << endl;
 
     // check if the node is indeed a leaf
-    if(!B->isLeaf || leaf_node->children.size() > 0)
-        throw invalid_argument("Trying to expand a non-leaf node of the multi-source paths tree");
+    if(!B->isLeaf || leaf_node->children.size() > 0){
+        // printMPtree(mptree);
+        // printLeaves();
+        // printSemiLeaves();
+        // cout << "Trying to expand component with ID " << B->myID << ", which has isLeaf="<< B->isLeaf << " and number of children " << leaf_node->children.size() << endl;
+        throw invalid_argument("Trying to expand a non-leaf node of the multi-source paths tree (BCC is non leaf or tree node has children)");
+    }
 
     // choose a source at random 
     int sIndex = rand() % B->sources.size();
@@ -660,8 +667,13 @@ void explode(mptnode* leaf_node){
     int og_multiplicity = sBpair.second;
     int sB = sBpair.first;
 
-    if(og_multiplicity == -1) // the BCC had children BCCs
-        throw logic_error("Trying to expand a non-leaf node of the multi-source paths tree");
+    if(og_multiplicity == -1){ // the BCC had children BCCs
+        // printMPtree(mptree);
+        // printLeaves();
+        // printSemiLeaves();
+        // cout << "Trying to expand component with ID " << B->myID << endl;
+        throw logic_error("Trying to expand a non-leaf node of the multi-source paths tree (source is art point)");
+    }
 
 
     // we need to consider two cases according to the size of B->sources!
@@ -869,10 +881,10 @@ void explode(mptnode* leaf_node){
         
 
         // also, set up if it is a leaf: that is, if it ONLY has sources with multiplicity > 0, that is, they are neighbors of the source
-        if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [](const pair<int, int>& p){return p.second == -1;}) == current_BCC->sources.end()){
+        if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [&current_BCC](const pair<int, int>& p){return p.second == -1;}) == current_BCC->sources.end()){
             current_BCC->isLeaf = true;
         }
-
+        
         // add the BCC to the final vector
         decomposed_BCC.push_back(current_BCC);
     }
@@ -1076,7 +1088,7 @@ bool assess_paths(mptnode* current_node){
             // tree_leaves.erase(tree_leaves.begin() + leaf_index);
         // }
 
-        cout << "Updated running bound: "<< running_bound <<endl;
+        // cout << "Updated running bound: "<< running_bound <<endl;
     }
 
     return true; // exited while bound < z
@@ -1106,7 +1118,7 @@ int main(int argc, char** argv) {
         srand(time(NULL));
     #endif
 
-    srand(13);
+    // srand(13);
 
     mptnode* graph_node = mptree->children[0];
 
