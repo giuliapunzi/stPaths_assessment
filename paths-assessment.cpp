@@ -966,10 +966,13 @@ void explode(mptnode* leaf_node){
     return;
 }
 
+long threshold= 1000;
 
 bool assess_paths(mptnode* current_node){
     auto leaf_it = find(tree_leaves.begin(), tree_leaves.end(), current_node);
     int leaf_index = leaf_it - tree_leaves.begin();
+
+    uint64_t assess_start = timeMs();
 
     while (running_bound < z){
         // if we are at the root of the tree, we are done
@@ -1089,6 +1092,12 @@ bool assess_paths(mptnode* current_node){
         // }
 
         // cout << "Updated running bound: "<< running_bound <<endl;
+
+        
+        if(running_bound>threshold){
+            cout << "Running bound is "<< running_bound<< "; time elapsed: "<< timeMs() - assess_start << "ms" <<endl;
+            threshold*=10;
+        }
     }
 
     return true; // exited while bound < z
@@ -1142,7 +1151,11 @@ int main(int argc, char** argv) {
     // cout << "Ending running bound: "<< running_bound <<endl;
     tree_leaves.push_back(graph_node);
 
+    uint64_t start_time = timeMs();
     bool enough = assess_paths(graph_node);
+    uint64_t duration = (timeMs() - start_time);
+
+    cout << "Elapsed time: " << duration << "ms"  << endl;
 
     if(enough)
         cout << "The paths are at least z=" << z << endl;
