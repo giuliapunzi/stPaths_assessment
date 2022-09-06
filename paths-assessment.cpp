@@ -142,7 +142,7 @@ void create_graph(char* filename)
     dummyBCC->sources = {make_pair(t, -1)};
     dummyBCC->target = N;
     dummyBCC->personalBound = 1;
-    dummyBCC->bound_multiplier = 1;
+    dummyBCC->bound_multiplier = 0;
     dummyBCC->prodAncestors = 1;
     dummyBCC->myID = -1;
     dummyBCC->nodes = {t, N};
@@ -394,6 +394,7 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 current_BCC->myID = ++maxID;
                 current_BCC->prodAncestors = -1;
                 current_BCC->num_edges = 0;
+                current_BCC->bound_multiplier = 0;
 
                 // for each node x, iterate through incident edges for it in B and add edges if the other endpoint is also in currentBCC
                 for(auto x: current_BCC->nodes) {
@@ -585,7 +586,67 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
 // void explode(BCC* B){
 void explode(mptnode* leaf_node){
     BCC* B = leaf_node->corrBCC;
+
+    // treat case of trivial component (two nodes)
+    if(B->nodes.size() == 2)
+    { 
+        if(DEBUG) cout << "Component is trivial! " << endl;
+
+        if(leaf_node->corrBCC->bound_multiplier != leaf_node->corrBCC->sources[0].second)
+            throw logic_error("The bound multiplier of a trivial BCC is different from its source multiplicity");
+
+        if(leaf_node->corrBCC->sources.size() > 1)
+            throw logic_error("A trivial BCC has more than one source: impossible!");
+
+        // running bound is unchanged as component personal bound was 1 
+
+        // find the source of the parent that corresponds to the target of B
+        mptnode * parent_node = leaf_node->parent;
+        vector<pair<int,int>>::iterator find_source = find_if(parent_node->corrBCC->sources.begin(), parent_node->corrBCC->sources.end(), [&B](const pair<int,int> p){return p.first == B->target;});
+        if(find_source == parent_node->corrBCC->sources.end())
+            throw logic_error("Target of child node is not a source of parent node");
+
+        // assign multiplicity of source of B to the find_source source and also add it to the bound multiplier of the parent component
+        int sB_mult = B->sources[0].second;
+        if(parent_node->corrBCC->sources[find_source-parent_node->corrBCC->sources.begin()].second == -1) // if it was art point, set its multiplicity to sB_mult
+            parent_node->corrBCC->sources[find_source-parent_node->corrBCC->sources.begin()].second = sB_mult;
+        else // otherwise, add the multiplicity to the one it already has
+            parent_node->corrBCC->sources[find_source-parent_node->corrBCC->sources.begin()].second += sB_mult;
+
+        // in any case, add it to the bound multiplier
+        parent_node->corrBCC->bound_multiplier += sB_mult;
+
+        // remove the leaf, and add the parent to leaves or semi-leaves according to whether it has more children
+        vector<mptnode*>::iterator find_child = find(parent_node->children.begin(), parent_node->children.end(), leaf_node);
+        if(find_child == parent_node->children.end())
+            throw logic_error("Child is not in children vector of parent");
+        
+        parent_node->children.erase(find_child); // remove leaf node from parent's children
+
+        // check if parent was a semi leaf
+        vector<mptnode*>::iterator is_semi_leaf = find(tree_semi_leaves.begin(), tree_semi_leaves.end(), parent_node);
+
+        if(parent_node->children.size() == 0){ // if leaf_node was the only child, then parent node becomes leaf node
+            tree_leaves.push_back(parent_node);
+            if(is_semi_leaf != tree_semi_leaves.end()) // if it was also a semi-leaf, it must be removed from that vector
+                tree_semi_leaves.erase(is_semi_leaf);
+        }       
+        else{ // here it is surely a semi-leaf, so we add it to them if not already in the vector
+            if(is_semi_leaf == tree_semi_leaves.end()) // if it was also a semi-leaf, it must be removed from that vector
+                tree_semi_leaves.push_back(parent_node);
+        }
+
+        // no need for bound update; but we need to remove the node from leaf nodes and altogether
+        tree_leaves.erase(find(tree_leaves.begin(), tree_leaves.end(), leaf_node));
+        
+        delete leaf_node->corrBCC;
+        delete leaf_node;
+
+        return;
+    }
+
     running_bound-=leaf_to_root_bound(leaf_node); // remove contribution of leaf node right away
+    if(DEBUG) cout << "Running bound decreased by " << leaf_to_root_bound(leaf_node) << " (contribution of leaf node)" << endl;
 
     // check if the node is indeed a leaf
     if(!B->isLeaf || leaf_node->children.size() > 0)
@@ -621,15 +682,18 @@ void explode(mptnode* leaf_node){
     mptnode* node_to_replace = leaf_node;
     if(B->sources.size()>1){ // if the number of sources is greater than one, create an actual copy
         newB = new BCC;
-        newB->sources = B->sources;
+        // newB->sources = B->sources; // NO: IT MUST ONLY HAVE THE SOURCE I AM REMOVING AS SOURCE
+        newB->sources = {sBpair};
         newB->target = B->target;
         newB->personalBound = B->personalBound;
         newB->prodAncestors = B->prodAncestors;
+        newB->bound_multiplier = sBpair.second; // only source is sB
         newB->myID = B->myID;
         newB->isLeaf = B->isLeaf;
         newB->nodes =B->nodes;
         newB->edges = B->edges;
         newB->num_edges = B->num_edges;
+        
 
         node_to_replace = new mptnode;
         node_to_replace->corrID = leaf_node->corrID;
@@ -688,6 +752,8 @@ void explode(mptnode* leaf_node){
             changed_semi_leaf = true; 
             semi_leaf_index = parent_semi_leaf - tree_semi_leaves.begin(); // we indeed changed the contribution of a semi leaf, specifically the one at position semi_leaf_index 
             running_bound -= leaf_to_root_bound(tree_semi_leaves[semi_leaf_index]); // remove from bound before changing multiplicity
+            
+            if(DEBUG) cout << "Running bound decreased by " << leaf_to_root_bound(tree_semi_leaves[semi_leaf_index]) << " (contribution of parent semi leaf node)" << endl;
         }
 
         auto update_it = find_if(source_to_update->sources.begin(), source_to_update->sources.end(), [& newB](const pair<int,int> p){return p.first == newB->target;}); // find position of source to update
@@ -699,8 +765,11 @@ void explode(mptnode* leaf_node){
 
         source_to_update->bound_multiplier+=og_multiplicity;
 
-        if(changed_semi_leaf)
+        if(changed_semi_leaf){
             running_bound+=leaf_to_root_bound(tree_semi_leaves[semi_leaf_index]); // re-add contribution after changing multiplicity
+            
+            if(DEBUG) cout << "Running bound increased by " << leaf_to_root_bound(tree_semi_leaves[semi_leaf_index]) << " (contribution of parent semi leaf node after adjusting parameters)" << endl;
+        }
     }
     
     // initialize support vectors for findBCC
@@ -848,16 +917,23 @@ void explode(mptnode* leaf_node){
     //     running_bound+= leaf_to_root_bound(leaf_node); // re-add after multiplicity of source has been decreased 
     // }
 
-    // if it was a copy, re-add contribution of original node (it might have changed)
-    if(is_copy)
+    // if it was a copy, re-add contribution of original node (it will have changed because of source removal)
+    if(is_copy){
         running_bound+=leaf_to_root_bound(leaf_node);
+        
+        if(DEBUG) cout << "Running bound increased by " << leaf_to_root_bound(leaf_node) << " (contribution of leaf node)" << endl; 
+    }
 
     // 2) add contributions of all leaves to it 
-    for (auto i = og_leaves; i < tree_leaves.size(); i++) // only iterates on the new leaves = the ones of the new subtree
+    for (auto i = og_leaves; i < tree_leaves.size(); i++){ // only iterates on the new leaves = the ones of the new subtree
         running_bound += leaf_to_root_bound(tree_leaves[i]);
+        if(DEBUG) cout << "Running bound increased by " << leaf_to_root_bound(tree_leaves[i]) << " (contribution of new leaf node)" << endl;
+    }
     
-    for (auto i = og_semi_leaves; i < tree_semi_leaves.size(); i++) // only iterates on the new semi leaves = the ones of the new subtree
+    for (auto i = og_semi_leaves; i < tree_semi_leaves.size(); i++){ // only iterates on the new semi leaves = the ones of the new subtree
         running_bound += leaf_to_root_bound(tree_semi_leaves[i]);
+        if(DEBUG) cout << "Running bound increased by " << leaf_to_root_bound(tree_semi_leaves[i]) << " (contribution of new semi leaf node)" << endl;
+    }
 
     // NOTE: we could have increased the multiplicity of a semi leaf if the source was neighboring the target. In this case, subtract old and re-add new contribution
     // ----- done right away 
@@ -886,7 +962,7 @@ bool assess_paths(mptnode* current_node){
     while (running_bound < z){
         // if we are at the root of the tree, we are done
         if(current_node == mptree){
-            if(tree_leaves.size() == 0){
+            if(tree_leaves.size() == 1 && current_node->children.size() == 0){
                 running_bound = current_node->corrBCC->bound_multiplier;
                 return running_bound >= z;
             }
@@ -904,79 +980,83 @@ bool assess_paths(mptnode* current_node){
 
         // ---------------------------- THERE IS A PROBLEM HERE WITH TRIVIAL COMPONENTS -------------------------------
         // if we are at a trivial component, go on by bringing the multiplicity to the parent component
-        if(current_node->corrBCC->nodes.size() == 2){ 
-            if(DEBUG) cout << "Considering trivial component with ID="<< current_node->corrID << endl; 
-            if(DEBUG){
-                printLeaves();
-                printSemiLeaves();
-            }
+        // if(current_node->corrBCC->nodes.size() == 2){ 
+        //     if(DEBUG) cout << "Considering trivial component with ID="<< current_node->corrID << endl; 
+        //     if(DEBUG){
+        //         printLeaves();
+        //         printSemiLeaves();
+        //     }
 
-            if(DEBUG) cout << "Leaf index is " << leaf_index << endl;
+        //     if(DEBUG) cout << "Leaf index is " << leaf_index << endl;
 
-            // if(DEBUG) cout << "It has "<< current_node->corrBCC->nodes.size() << " nodes" << endl; 
-            if(current_node->corrBCC->bound_multiplier != current_node->corrBCC->sources[0].second)
-                throw logic_error("The bound multiplier of a trivial BCC is different from its source multiplicity");
+        //     // if(DEBUG) cout << "It has "<< current_node->corrBCC->nodes.size() << " nodes" << endl; 
+        //     if(current_node->corrBCC->bound_multiplier != current_node->corrBCC->sources[0].second)
+        //         throw logic_error("The bound multiplier of a trivial BCC is different from its source multiplicity");
 
-            if(current_node->corrBCC->sources.size() > 1)
-                throw logic_error("A trivial BCC has more than one source: impossible!");
+        //     if(current_node->corrBCC->sources.size() > 1)
+        //         throw logic_error("A trivial BCC has more than one source: impossible!");
 
-            mptnode* parent_node = current_node->parent;
-            parent_node->corrBCC->bound_multiplier += current_node->corrBCC->bound_multiplier; // increase the bound multiplier of the parent
-            vector<pair<int,int>> parent_sources = parent_node->corrBCC->sources;
-            auto find_source = find_if(parent_sources.begin(), parent_sources.end(), [&](const pair<int, int> p){return p.first == current_node->corrBCC->target;});
+        //     mptnode* parent_node = current_node->parent;
+        //     parent_node->corrBCC->bound_multiplier += current_node->corrBCC->bound_multiplier; // increase the bound multiplier of the parent
+        //     vector<pair<int,int>> parent_sources = parent_node->corrBCC->sources;
+        //     auto find_source = find_if(parent_sources.begin(), parent_sources.end(), [&](const pair<int, int> p){return p.first == current_node->corrBCC->target;});
             
-            if(find_source == parent_sources.end())
-                throw logic_error("Parent of current node does not have its target as a source");
+        //     if(find_source == parent_sources.end())
+        //         throw logic_error("Parent of current node does not have its target as a source");
             
-            int source_index = find_source-parent_node->corrBCC->sources.begin();
+        //     int source_index = find_source-parent_node->corrBCC->sources.begin();
+
+        //     if(DEBUG) cout << "Parent node is the one of ID  " << parent_node->corrID << endl;
+        //     if(DEBUG) cout << "Need to update source " << parent_sources[source_index].first << " of  index " << source_index << " of the parent. " << endl;
             
-            if(parent_sources[source_index].second == -1) // if the source is only an articulation point, set its multiplicity to the bound multiplier of the current node
-                parent_node->corrBCC->sources[source_index].second = current_node->corrBCC->bound_multiplier; 
-            else // otherwise, sum to its multiplicity the bound multiplier of the current node
-                parent_node->corrBCC->sources[source_index].second += current_node->corrBCC->bound_multiplier; 
+        //     if(parent_sources[source_index].second == -1) // if the source is only an articulation point, set its multiplicity to the bound multiplier of the current node
+        //         parent_node->corrBCC->sources[source_index].second = current_node->corrBCC->bound_multiplier; 
+        //     else // otherwise, sum to its multiplicity the bound multiplier of the current node
+        //         parent_node->corrBCC->sources[source_index].second += current_node->corrBCC->bound_multiplier; 
 
 
-            tree_leaves.erase(tree_leaves.begin() + leaf_index);
+        //     tree_leaves.erase(tree_leaves.begin() + leaf_index);
 
-            // now we need to set the parent as a leaf, if it wasn't already, and delete the old current_node
-            // TO CHECK IF IT IS LEAF: look at the size of parent's children after the removal of current node. 
-            auto curr_child = find(parent_node->children.begin(), parent_node->children.end(),current_node);
-            parent_node->children.erase(curr_child);
-            delete_mptnode(current_node);
+        //     // now we need to set the parent as a leaf, if it wasn't already, and delete the old current_node
+        //     // TO CHECK IF IT IS LEAF: look at the size of parent's children after the removal of current node. 
+        //     auto curr_child = find(parent_node->children.begin(), parent_node->children.end(),current_node);
+        //     parent_node->children.erase(curr_child);
+        //     delete_mptnode(current_node);
 
             
-            if(!parent_node->corrBCC->isLeaf){ // could not have been in semi leaves
-                parent_node->corrBCC->isLeaf = true;
-                // tree_leaves.push_back(parent_node);
-                // check if actual leaf, or only semi leaf
-                if(parent_node->children.size() == 0)
-                    tree_leaves.push_back(parent_node);
-                else
-                    tree_semi_leaves.push_back(parent_node);
-            }
-            else{ // otherwise, it could be a semi-leaf and stay that way, or semi-leaf becoming leaf
-                auto semi_leaf_it = find(tree_semi_leaves.begin(), tree_semi_leaves.end(), parent_node);
-                if(parent_node->children.size() == 0){ // it has now become a leaf
-                    tree_leaves.push_back(parent_node);
-                    if(semi_leaf_it == tree_semi_leaves.end())
-                        throw logic_error("BCC was marked as leaf but tree node was neither leaf nor semi leaf");
+        //     if(!parent_node->corrBCC->isLeaf){ // could not have been in semi leaves
+        //         parent_node->corrBCC->isLeaf = true;
+        //         // tree_leaves.push_back(parent_node);
+        //         // check if actual leaf, or only semi leaf
+        //         if(parent_node->children.size() == 0)
+        //             tree_leaves.push_back(parent_node);
+        //         else
+        //             tree_semi_leaves.push_back(parent_node);
+        //     }
+        //     else{ // otherwise, it could be a semi-leaf and stay that way, or semi-leaf becoming leaf
+        //         auto semi_leaf_it = find(tree_semi_leaves.begin(), tree_semi_leaves.end(), parent_node);
+        //         if(parent_node->children.size() == 0){ // it has now become a leaf
+        //             tree_leaves.push_back(parent_node);
+        //             if(semi_leaf_it == tree_semi_leaves.end())
+        //                 throw logic_error("BCC was marked as leaf but tree node was neither leaf nor semi leaf");
 
-                    tree_semi_leaves.erase(semi_leaf_it);
-                }
-            }
+        //             tree_semi_leaves.erase(semi_leaf_it);
+        //         }
+        //     }
             
-            // take parent node as current if it is not the root, otherwise extract at random
-            if(parent_node!= mptree)
-                current_node = parent_node;
-            else{
-                // choose the next current node at random from the leaves
-                leaf_index = rand() % tree_leaves.size();
-                current_node = tree_leaves[leaf_index];
-                // tree_leaves.erase(tree_leaves.begin() + leaf_index);
-            }
-        }
-        // -----------------------------------------------------------------------------------------
-        else{ // here we have a current node with at least three nodes = worth expanding
+        //     // take parent node as current if it is not the root, otherwise extract at random
+        //     if(parent_node!= mptree)
+        //         current_node = parent_node;
+        //     else{
+        //         // choose the next current node at random from the leaves
+        //         leaf_index = rand() % tree_leaves.size();
+        //         current_node = tree_leaves[leaf_index];
+        //         // tree_leaves.erase(tree_leaves.begin() + leaf_index);
+        //     }
+        // }
+        // // -----------------------------------------------------------------------------------------
+        // else{ // here we have a current node with at least three nodes = worth expanding
+
             if(DEBUG) cout << "Considering component with ID="<< current_node->corrID << endl<< flush; 
             if(DEBUG){
                 printLeaves();
@@ -994,7 +1074,7 @@ bool assess_paths(mptnode* current_node){
             leaf_index = rand() % tree_leaves.size();
             current_node = tree_leaves[leaf_index];
             // tree_leaves.erase(tree_leaves.begin() + leaf_index);
-        }
+        // }
 
         cout << "Updated running bound: "<< running_bound <<endl;
     }
@@ -1025,6 +1105,8 @@ int main(int argc, char** argv) {
     #ifdef RANDOM_NODE_EXTRACTION
         srand(time(NULL));
     #endif
+
+    srand(13);
 
     mptnode* graph_node = mptree->children[0];
 
