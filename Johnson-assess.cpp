@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <stack>
 
 using namespace std;
 
@@ -22,10 +23,12 @@ long MAX_TIME = -1;
 
 int SOURCE;
 int TARGET;
+int z;
 
 ///////////////////////////////////////////////////////////
 
-vector<int> deleted;
+vector<bool> deleted;
+vector<bool> reachable;
 vector<int> current_degree;
 typedef vector<vector<int>> graph;
 graph G;
@@ -56,7 +59,7 @@ void create_graph(char* filename)
     G.resize(N);
     deleted.resize(N);
     current_degree.resize(N, 0);
-    // reachable.resize(N, 1);
+    reachable.resize(N, 1);
 
     // initialize reachable vector to be all 1 and degree to be zero
     for(int i = 0; i < G.size() ; i++){
@@ -107,6 +110,7 @@ graph create_graph_aa(char* filename)
 
     G.resize(N);
     deleted.resize(N);
+    reachable.resize(N);
 
     int u, v;
     for(int i=0; i<M; i++)
@@ -122,7 +126,7 @@ graph create_graph_aa(char* filename)
         
     }
 
-    cout << "Input graph has " << N << " nodes and " << real_edges << " edges. "<< endl;
+    // cout << "Input graph has " << N << " nodes and " << real_edges << " edges. "<< endl;
 
     fclose(input_graph);
     return G;
@@ -216,66 +220,33 @@ inline void remove_node(int u)
 
 // ++++++++++++++++++++++++++++++++ GRAPH VISITS +++++++++++++++++++++++++++++++
 
-// recursive DFS procedure from node u
-void DFS(int u, vector<bool> &visited){
-    // cout << "Entering DFS for " << u << endl << flush;
-    visited[u] = true;
+// iterative DFS procedure from node u
+void DFS_iter(int u){
+    // initialize reachable
+    for(int i = 0; i< reachable.size(); i++)
+        reachable[i] = false;
 
-    for(int i = 0; i < G[u].size(); i++)
+    stack<int> DFS_stack;
+    DFS_stack.push(u);
+
+    while (!DFS_stack.empty())
     {
-        if(!visited[G[u][i]] && !deleted[G[u][i]])
-            DFS(G[u][i], visited);
-    }
+        int v = DFS_stack.top();
+        DFS_stack.pop();
+        reachable[v] = true;
 
-    return;
+        for (auto x : G[v])
+        {
+            if(!reachable[x]) // and not dleted
+                DFS_stack.push(x);
+        }
+        
+    }
+    
 }
 
 int visits_performed;
 
-// starts a visit from t, and marks as good neighbors the neighbors of s that
-// are reached through the visit. Outputs the vector of these good neighbors.
-vector<bool> check_neighbors(int s, int t){
-    vector<bool> visited(G.size());
-    visits_performed++;
-
-    // DELETION OF S PERFORMED BEFORE CALL TO FUNCTION
-    // before starting, mark s as deleted
-    // deleted[s] = 1;
-
-    // initialize all deleted nodes as visited
-    for(int i = 0; i< visited.size(); i++){
-        if(deleted[i])
-            visited[i] = true;
-        else
-            visited[i] = false;
-    }
-
-    // for(auto x : visited)
-    //     cout << x << " " << flush;
-    // cout << endl;
-
-    // launch DFS from node t
-    DFS(t, visited);
-
-    vector<int> neigh = neighbors(s);
-    // find out which neighbors of s have been visited, and output them
-    vector<bool> good_neighbors(neigh.size());
-    for(int i = 0; i < neigh.size(); i++){
-        if(visited[neigh[i]])
-            good_neighbors[i] = true;
-            // good_neighbors.push_back(G[s][i]);
-        else
-            good_neighbors[i] = false;
-            
-    }
-    
-    // cout << "Before outputting good neighbors: size is " << good_neighbors.size() << ", while size of neighbors is "<< neigh.size() << endl<< flush;
-
-    // undo deletion of s 
-    // deleted[s] = 0;
-
-    return good_neighbors;
-}
 
 // global variable used to count the number of paths
 // also count the total length of the paths up to now 
@@ -294,7 +265,7 @@ unsigned long dead_diff_len; // edges only belonging to dead ends; increase by 1
 // plus global variable that takes into account the number of calls performed
 const long MAX_CALLS = 500000000000;
 // const long MAX_TIME = 60000; 
-int calls_performed;
+// int calls_performed;
 uint64_t start_time;
 
 
@@ -303,7 +274,7 @@ void enumerate_paths(int s, int t){
     count_paths = 0;
     total_length = 0;
     dead_ends = 0;
-    calls_performed = 0;
+    // calls_performed = 0;
     curr_path_len = -1;
     good_diff_len = 0;
     dead_diff_len = 0;
@@ -358,9 +329,13 @@ void UNBLOCK(int u){
 long time_evals = 0;
 long eval_resolution = 10000;
 bool abort_alg = false;
+long calls_performed=0;
 
 short PATHS(int v){
+    if(all_paths >= z)
+        return true;
 
+    calls_performed++;
     if(abort_alg) return true;
     else if (MAX_TIME > 0 && time_evals%eval_resolution == 0){
         if(timeMs() - start_time >= MAX_TIME){
@@ -402,20 +377,21 @@ short PATHS(int v){
 
 int main(int argc, char * argv[]){
     
-    if(argc < 4){
-        cout << "USAGE: ./" << argv[0] << " <graph> <source> <targer> [MAX_TIME]\n";
+    if(argc < 5){
+        cout << "USAGE: " << argv[0] << " <graph> <source> <target> <z> [MAX_TIME]\n";
         return 0;
     }
 
-    if(argc >= 5) MAX_TIME = atoi(argv[4]);
+    if(argc >= 6) MAX_TIME = atoi(argv[5])*1000;
 
     SOURCE = atoi(argv[2]);
     TARGET = atoi(argv[3]);
+    z = atoi(argv[4]);
 
-    cout << "G: " << argv[1] << " S: " << SOURCE << " T: " << TARGET;
+    // cout << "G: " << argv[1] << " S: " << SOURCE << " T: " << TARGET;
 
-    if(MAX_TIME > 0) cout << " MAX_TIME: " << MAX_TIME << "ms";
-    cout << endl;
+    // if(MAX_TIME > 0) cout << " MAX_TIME: " << MAX_TIME << "s";
+    // cout << endl;
 
     char* input_filename = argv[1];
     create_graph(input_filename);
@@ -440,7 +416,22 @@ int main(int argc, char * argv[]){
     }
     numedges = numedges/2;
 
-    cout << "Graph has maximum degree " << maxdeg << " and n=" << G.size() << endl; 
+    // cout << "Graph has maximum degree " << maxdeg << " and n=" << G.size() << endl; 
+
+    // vector<bool> visited(G.size());
+
+    // for(int i = 0; i< visited.size(); i++){
+    //         visited[i] = false;
+    // }
+
+    // chech reachability of s from t
+    DFS_iter(TARGET);
+
+    if(!reachable[SOURCE]){
+        cout << "Node s is not reachable from t" << endl;
+        return 0;
+    }
+    
 
     start_time = timeMs();
     // standard: s = 0, t=last node
@@ -453,8 +444,10 @@ int main(int argc, char * argv[]){
     PATHS(SOURCE);
 
     uint64_t duration = (timeMs() - start_time);
+    
+    // cout << "DONE! time: " << duration << "ms, rec calls: "<< calls_performed << ", paths: " << all_paths << endl;
+    cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << "  " << z << endl;
 
-    cout << "DONE! time: " << duration << "ms, paths: " << all_paths << endl;
 
 /*****
     enumerate_paths(0, G.size()-1);

@@ -19,13 +19,11 @@ uint64_t timeMs() {
 using namespace std;
 
 int N; // size of the graph/biggest component; used for global vectors
-int M; // number of edges of the graph
 int maxID = 0; // maximum ID of a BCC
 int s, t; // original source and target for st-paths problem
 int z; // value to assess for
-long MAX_TIME = -1;
+long MAX_TIME;
 unsigned long running_bound = 1;
-unsigned long calls_performed = 0;
 
 // ----------- global vectors for findBCCs
 vector<bool> visited;
@@ -98,6 +96,7 @@ void create_graph(char* filename)
     is_art_point.resize(N);
     times_art_point.resize(N);
 
+
     BCC* G = new BCC;
     G->sources = {make_pair(s, 1)};
     G->target = t;
@@ -128,7 +127,7 @@ void create_graph(char* filename)
         }   
     }
 
-    // cout << "Input graph has " << N << " nodes and " << G->num_edges << " edges. "<< endl;
+    cout << "Input graph has " << N << " nodes and " << G->num_edges << " edges. "<< endl;
 
     fclose(input_graph);
 
@@ -137,8 +136,6 @@ void create_graph(char* filename)
     // tree_leaves.push_back(G); // initialize the leaf nodes and all nodes
     // all_tree_nodes.push_back(G);
     // running_bound = G->personalBound;
-
-    M= G->num_edges;
 
 
     // ADD NEW DUMMY NODE AND BUILD THE TREE
@@ -231,8 +228,8 @@ void printTreeComponents(mptnode * tree_node){
 
 void printMPtree(mptnode * tree_node){
     printTreeNodes(tree_node);
-    // cout << "Where the components are: "<< endl;
-    // printTreeComponents(tree_node);    
+    cout << "Where the components are: "<< endl;
+    printTreeComponents(tree_node);    
 
     return;
 }
@@ -269,6 +266,9 @@ void delete_all(mptnode* tree_node){
 
     return;
 }
+
+
+
 
 void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neighbors, int og_multiplicity)
 {   
@@ -456,6 +456,191 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
 }
 
 
+
+bool found_s = false;
+int current_s;
+vector<int> cat_stack;
+vector<bool> to_remove;
+
+void find_artpts(int s, int u, BCC* B)
+{
+    cat_stack.push_back(u);
+    // Count of children in DFS Tree
+    int children = 0;
+    if(u== s){
+        found_s = true;
+    }
+ 
+    // Mark the current node as visited
+    visited[u] = true;
+ 
+    // Initialize discovery time and low value
+    disc[u] = low[u] = ++visit_time;
+    
+    int root_correct_neigh = -1;
+    bool root_found = false; // becomes true when the root finds s
+    bool good_for_current_BCC;    
+
+    if(DEBUG) cout << "Inside caterpillar" << endl;
+
+    // Go through all neighbors of u
+    for (auto v : B->edges[u]) {
+        if(DEBUG) cout << "Considering node " << v  << endl;
+        // If v is not visited yet, then make it a child of u
+        // in DFS tree and recur for it
+        if (!visited[v]) {
+            if(DEBUG) cout << "Considering nonvisited node " << v << endl;
+            good_for_current_BCC = false;
+            parent[v] = u;
+            children++;
+            find_artpts(s,v,B);
+
+            // if we are the root and we just found s, v is the only good neighbor
+            // if(parent[u] == -1){
+            //     if(!root_found){ 
+            //         root_correct_neigh = v; 
+            //         root_found = true;
+            //     }
+            // }
+
+            // if the root finishes a child, then it basically closes an articulation point
+            // if it has seen s, this is the correct BCC
+            if(parent[u] == -1 && found_s){
+                if(DEBUG) cout << "Root closed art point after seeing s " << endl;
+                // it could be the second BCC for t so we need to unstack until v
+                int x = cat_stack.back();
+                while(x != v){ // If we are in the "right" BCC add it to the vector   
+                    cat_stack.pop_back();
+                    x = cat_stack.back();
+                }
+                cat_stack.pop_back(); 
+
+                return;
+            }
+
+            // if root finishes a child without finding s, all nodes in the stack are to be removed 
+            if(parent[u]==-1 && !found_s){
+                if(DEBUG) cout << "Root finished child "<< v <<" without finding s" << endl;
+                int x = cat_stack.back();
+                while(x != v){  
+                    cat_stack.pop_back();
+                    to_remove[x]=true;
+                    if(DEBUG) cout << "Marking node " << x << " to be removed" << endl;
+                    x = cat_stack.back();
+                }
+                cat_stack.pop_back(); 
+                to_remove[v]=true;
+                if(DEBUG) cout << "Marking node " << v << " to be removed" << endl;
+            }
+
+            // Check if the subtree rooted with v has
+            // a connection to one of the ancestors of u
+            low[u] = min(low[u], low[v]);
+
+            // If u is not root and low value of one of
+            // its child is more than discovery value of u.
+            if (parent[u] != -1 && low[v] >= disc[u]){ // here is where I close my articulation point
+                if(DEBUG) cout << "Closed art point " << u << " because of child " << v << endl;
+                // find if good right away
+                int check = cat_stack.size()-1;
+                // first, find out if good for current BCC by scanning only the current BCC
+                while(cat_stack[check] != v)
+                {
+                    if (cat_stack[check]== current_s){
+                        good_for_current_BCC = true;
+                    }  
+                    check--;
+                }
+                if(v == current_s) 
+                    good_for_current_BCC = true;
+
+                if(good_for_current_BCC)
+                    if(DEBUG) cout << "It is good for caterpillar!" << endl;
+                
+                // I need to pop the stack until v (the last neighbor). If it is not good, delete nodes
+                int x = cat_stack.back();
+                while(x != v){
+                    if(!good_for_current_BCC) to_remove[x]=true;
+                    cat_stack.pop_back();
+                    x = cat_stack.back();
+                }
+                cat_stack.pop_back(); // remove also v
+                if(!good_for_current_BCC) to_remove[v] = true;
+
+                // NEW: SET THE CURRENT ART POINT AS S!
+                if(good_for_current_BCC){
+                    // good_art[u] = true;
+                    current_s = u;
+                }
+            }
+        }
+
+        // Update low value of u for parent function calls.
+        else if (v != parent[u])
+            low[u] = min(low[u], disc[v]);
+        
+    }
+
+}
+
+
+// start visit for finding articulation points from t
+void find_caterpillar(mptnode* tree_node)
+{   
+    BCC* B = tree_node->corrBCC;
+    cat_stack.erase(cat_stack.begin(), cat_stack.end());
+    visit_time = 0;
+    found_s = false;
+    current_s = s;
+    to_remove.resize(B->nodes.size());
+
+    for(auto i : B->nodes){
+        visited[i] = false;
+        parent[i] = -2;
+        to_remove[i]=false;
+    }
+    
+    parent[B->target] = -1;
+
+    if(DEBUG){
+        cout << "Edges neighboring t=" << B->target << " are: ";
+        for (auto nt: B->edges[B->target])
+        {
+            cout << nt <<" ";
+        }
+
+        cout << endl;
+        
+    }
+
+    uint64_t start = timeMs();
+    // only interested in the ones from s to t = caterpillar
+    find_artpts(s,B->target,B);
+
+    //any nodes left in the stack can be deleted (more bad neighbors of t)
+    // while(!cat_stack.empty()){ 
+    //     int x = cat_stack.back();
+    //     to_remove[x] = true;
+    //     cat_stack.pop_back();
+    // }
+
+    // now, remove from nodes of B all nodes marked to_remove
+    for(int i=0; i<B->nodes.size(); i++){
+        if(to_remove[i] || !visited[i]){
+            B->nodes.erase(find(B->nodes.begin(),B->nodes.end(), i)); // erase node i
+
+            for(auto u : B->edges[i]) // for every neighbor of i, erase i from its adjacency list
+                B->edges[u].erase(find_if(B->edges[u].begin(), B->edges[u].end(), [&i](const int v){return v==i;}));
+            B->edges.erase(i); // erase adjacency list of i
+        }
+    }
+
+    return;
+}
+
+
+
+
 // INPUT: BCC newB that has been exploded into decomposed_BCC vector of BCC, pointer to the root of the new tree for this vector of BCC and to node_to_replace, node of the tree to be replaced with the new subtree
 // OUTPUT: Creates the full multisource paths tree for decomposed_BCC with root new_tree, also filling the corresponding prodAncestor bounds and adding leaves to leaf vector 
 void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_replace){
@@ -595,7 +780,7 @@ void explode(mptnode* leaf_node){
     // treat case of trivial component (two nodes)
     if(B->nodes.size() == 2)
     { 
-        if(DEBUG) cout << "Component is trivial! " << endl<< flush;
+        if(DEBUG) cout << "Component is trivial! " << endl;
 
         if(leaf_node->corrBCC->bound_multiplier != leaf_node->corrBCC->sources[0].second)
             throw logic_error("The bound multiplier of a trivial BCC is different from its source multiplicity");
@@ -733,13 +918,6 @@ void explode(mptnode* leaf_node){
     // remove s from nodes, incident edges of s from edges
     newB->nodes.erase(find(newB->nodes.begin(), newB->nodes.end(), sB));
     vector<int> source_neighbors = newB->edges[sB]; // save neighbors of s for later
-
-    // if(DEBUG){
-        // cout << "Neighbors of the source are: "; 
-        // for(auto sneigh:source_neighbors)
-        //     cout << sneigh << " ";
-        // cout << endl << flush;
-    // }
 
     newB->edges.erase(newB->edges.find(sB));
     for (auto neigh: source_neighbors) // also delete from neighbors' list
@@ -986,11 +1164,6 @@ bool assess_paths(mptnode* current_node){
     uint64_t assess_start = timeMs();
 
     while (running_bound < z){
-
-        if(MAX_TIME>0 && timeMs() - assess_start > MAX_TIME)
-            return running_bound >= z;
-
-        calls_performed++;
         // if we are at the root of the tree, we are done
         if(current_node == mptree){
             if(tree_leaves.size() == 1 && current_node->children.size() == 0){
@@ -1009,31 +1182,103 @@ bool assess_paths(mptnode* current_node){
             }
         }
 
-        if(DEBUG) {
-        cout << "Considering component with ID="<< current_node->corrID << endl<< flush; 
-        cout << "Component has size " << current_node->corrBCC->nodes.size() <<endl<<flush;
-        }
+        // ---------------------------- THERE IS A PROBLEM HERE WITH TRIVIAL COMPONENTS -------------------------------
+        // if we are at a trivial component, go on by bringing the multiplicity to the parent component
+        // if(current_node->corrBCC->nodes.size() == 2){ 
+        //     if(DEBUG) cout << "Considering trivial component with ID="<< current_node->corrID << endl; 
+        //     if(DEBUG){
+        //         printLeaves();
+        //         printSemiLeaves();
+        //     }
+
+        //     if(DEBUG) cout << "Leaf index is " << leaf_index << endl;
+
+        //     // if(DEBUG) cout << "It has "<< current_node->corrBCC->nodes.size() << " nodes" << endl; 
+        //     if(current_node->corrBCC->bound_multiplier != current_node->corrBCC->sources[0].second)
+        //         throw logic_error("The bound multiplier of a trivial BCC is different from its source multiplicity");
+
+        //     if(current_node->corrBCC->sources.size() > 1)
+        //         throw logic_error("A trivial BCC has more than one source: impossible!");
+
+        //     mptnode* parent_node = current_node->parent;
+        //     parent_node->corrBCC->bound_multiplier += current_node->corrBCC->bound_multiplier; // increase the bound multiplier of the parent
+        //     vector<pair<int,int>> parent_sources = parent_node->corrBCC->sources;
+        //     auto find_source = find_if(parent_sources.begin(), parent_sources.end(), [&](const pair<int, int> p){return p.first == current_node->corrBCC->target;});
+            
+        //     if(find_source == parent_sources.end())
+        //         throw logic_error("Parent of current node does not have its target as a source");
+            
+        //     int source_index = find_source-parent_node->corrBCC->sources.begin();
+
+        //     if(DEBUG) cout << "Parent node is the one of ID  " << parent_node->corrID << endl;
+        //     if(DEBUG) cout << "Need to update source " << parent_sources[source_index].first << " of  index " << source_index << " of the parent. " << endl;
+            
+        //     if(parent_sources[source_index].second == -1) // if the source is only an articulation point, set its multiplicity to the bound multiplier of the current node
+        //         parent_node->corrBCC->sources[source_index].second = current_node->corrBCC->bound_multiplier; 
+        //     else // otherwise, sum to its multiplicity the bound multiplier of the current node
+        //         parent_node->corrBCC->sources[source_index].second += current_node->corrBCC->bound_multiplier; 
 
 
-        if(DEBUG){
-            printLeaves();
-            printSemiLeaves();
-        }
+        //     tree_leaves.erase(tree_leaves.begin() + leaf_index);
 
-        explode(current_node); // explode also removes from leaves
-        // cout << "Finished one explosion"<<endl;
-        // printMPtree(mptree);
+        //     // now we need to set the parent as a leaf, if it wasn't already, and delete the old current_node
+        //     // TO CHECK IF IT IS LEAF: look at the size of parent's children after the removal of current node. 
+        //     auto curr_child = find(parent_node->children.begin(), parent_node->children.end(),current_node);
+        //     parent_node->children.erase(curr_child);
+        //     delete_mptnode(current_node);
 
-        if(DEBUG){
-            printMPtree(mptree);
-            cout << endl;
-        }
+            
+        //     if(!parent_node->corrBCC->isLeaf){ // could not have been in semi leaves
+        //         parent_node->corrBCC->isLeaf = true;
+        //         // tree_leaves.push_back(parent_node);
+        //         // check if actual leaf, or only semi leaf
+        //         if(parent_node->children.size() == 0)
+        //             tree_leaves.push_back(parent_node);
+        //         else
+        //             tree_semi_leaves.push_back(parent_node);
+        //     }
+        //     else{ // otherwise, it could be a semi-leaf and stay that way, or semi-leaf becoming leaf
+        //         auto semi_leaf_it = find(tree_semi_leaves.begin(), tree_semi_leaves.end(), parent_node);
+        //         if(parent_node->children.size() == 0){ // it has now become a leaf
+        //             tree_leaves.push_back(parent_node);
+        //             if(semi_leaf_it == tree_semi_leaves.end())
+        //                 throw logic_error("BCC was marked as leaf but tree node was neither leaf nor semi leaf");
 
-        // choose the next current node at random from the leaves
-        leaf_index = rand() % tree_leaves.size();
-        current_node = tree_leaves[leaf_index];
-        // tree_leaves.erase(tree_leaves.begin() + leaf_index);
- 
+        //             tree_semi_leaves.erase(semi_leaf_it);
+        //         }
+        //     }
+            
+        //     // take parent node as current if it is not the root, otherwise extract at random
+        //     if(parent_node!= mptree)
+        //         current_node = parent_node;
+        //     else{
+        //         // choose the next current node at random from the leaves
+        //         leaf_index = rand() % tree_leaves.size();
+        //         current_node = tree_leaves[leaf_index];
+        //         // tree_leaves.erase(tree_leaves.begin() + leaf_index);
+        //     }
+        // }
+        // // -----------------------------------------------------------------------------------------
+        // else{ // here we have a current node with at least three nodes = worth expanding
+
+            if(DEBUG) cout << "Considering component with ID="<< current_node->corrID << endl<< flush; 
+            if(DEBUG){
+                printLeaves();
+                printSemiLeaves();
+            }
+
+            explode(current_node); // explode also removes from leaves
+
+            if(DEBUG){
+                printMPtree(mptree);
+                cout << endl;
+            }
+
+            // choose the next current node at random from the leaves
+            leaf_index = rand() % tree_leaves.size();
+            current_node = tree_leaves[leaf_index];
+            // tree_leaves.erase(tree_leaves.begin() + leaf_index);
+        // }
 
         // cout << "Updated running bound: "<< running_bound <<endl;
 
@@ -1054,7 +1299,7 @@ int main(int argc, char** argv) {
     }
 
 
-    if(argc >= 6) MAX_TIME = atoi(argv[5])*1000;
+    if(argc >= 6) MAX_TIME = atoi(argv[5]);
 
     s = atoi(argv[2]);
     t = atoi(argv[3]);
@@ -1086,6 +1331,19 @@ int main(int argc, char** argv) {
         }
     }
 
+    find_caterpillar(graph_node);
+
+    if(DEBUG){
+        cout << "After caterpillar: " << endl<<flush;
+        for(auto x : graph_node->corrBCC->nodes){
+            cout << x << ": ";
+            for(auto y : graph_node->corrBCC->edges[x]){
+                cout << y << " ";
+            }
+            cout << endl;
+        }
+    }
+
     // cout << "Starting running bound: "<< running_bound << endl;
     // explode(graph_node);
     
@@ -1099,15 +1357,12 @@ int main(int argc, char** argv) {
     bool enough = assess_paths(graph_node);
     uint64_t duration = (timeMs() - start_time);
 
-    // cout << "Elapsed time: " << duration << "ms"  << endl;
+    cout << "Elapsed time: " << duration << "ms"  << endl;
 
-    // if(enough)
-    //     cout << "The paths are at least z=" << z << endl;
-    // else    
-    //     cout << "The paths are exactly " << running_bound << " < z=" << z << endl;
-
-    cout << "Assessment: "<< argv[1] << " "<< N << " " << M <<  " " << s << " " << t << "; " << duration << " " << calls_performed  << " " << running_bound << " "<< z << endl;
-
+    if(enough)
+        cout << "The paths are at least z=" << z << endl;
+    else    
+        cout << "The paths are exactly " << running_bound << " < z=" << z << endl;
 
     delete_all(mptree);
 
