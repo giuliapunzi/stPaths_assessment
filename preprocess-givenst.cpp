@@ -349,62 +349,54 @@ void DFS(int u){
 
 
 int main(int argc, char** argv) { 
-    if(argc < 2){
-        cout << "USAGE: " << argv[0] << " <input filename> [output-filename]\n";
+    if(argc < 4){
+        cout << "USAGE: " << argv[0] << " <input filename> <source> <target> [output-filename]\n";
         return 0;
     }
     
     create_graph(argv[1]);
+    s = atoi(argv[2]);
+    t = atoi(argv[3]);
     
     // initialize all nodes as non-reachable
     for(int i = 0; i< reachable.size(); i++)
         reachable[i] = 0;
 
     srand (time(NULL));
+    // srand(42);
 
-    s = rand() % G.size();
-    t = rand() % G.size();
-
-    if(DEBUG) cout << "Checking s=" << s << " and t=" << t << endl;
+    if(s==t)
+        throw invalid_argument("Source and target must be different");
 
     // chech reachability of s from t
     if(s!= t)
         DFS(t);
 
-    while(!reachable[s]){
-        s =  rand() % G.size();
-        t = rand() % G.size();
-        // cout << "Checking s=" << s << " and t=" << t << endl; 
-        if(s!= t){
-            for(int i = 0; i< reachable.size(); i++)
-                reachable[i] = 0;
-
-            DFS(t);
-        }
-    }
+    if(!reachable[s])
+        throw invalid_argument("Target is not reachable from source");
     
     find_caterpillar(s, t);
 
     if(!visited[s])
-        throw logic_error("s is not reachable from t even after DFS check!");
+        throw logic_error("Source is not reachable from target even after DFS check!");
 
 
-    if(argc >= 3) outname = argv[2];
+    if(argc >= 5) outname = argv[2];
     else{
         string inname = argv[1];
 
         // int inlen = sizeof(argv[1])/sizeof(*argv[1]);
         // cout << "size is " << inname.length() << endl;
 
-        outname = "";
+        outname = "./preprocessed_datasets/";
         // cout << "outname=" << outname << endl << flush;
 
-        for(int i=0; i<inname.length()-4; i++)
+        for(int i=7; i<inname.length()-4; i++)
             outname = outname+(inname[i]);
 
         outname = outname + "-"+ to_string(new_names[s])+"-"+to_string(new_names[t])+".nde";
     }
-    // cout << "Outname is " << outname << endl<<flush;
+    if(DEBUG) cout << "Outname is " << outname << endl<<flush;
 
     
     write_graph(argv[1]);
