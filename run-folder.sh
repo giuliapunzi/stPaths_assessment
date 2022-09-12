@@ -14,33 +14,48 @@ timeout=$3
 
 if (($# >= 5)); then
     outnamesuffix=$4
+else 
+    outnamesuffix="misc-${z}-${timeout}.txt"
 fi
 
-if (($# = 4)); then
-    outnamesuffix="-misc-${z}-${timeout}.txt"
-fi
 
 # suffix=".txt"
 # glist_out=${glist%"$suffix"}
 # outname=${alg}-${glist_out}-results-${timeout}.txt
 
+for grafo in ./test/*; do 
+    if [ -f "$grafo" ]; then 
+        # echo "$grafo" 
+        revnome=$(echo ${grafo%".nde"} | rev) # reversed name = target-source-revrestonome
+        t=$(echo $revnome | cut -d "-" -f 1 | rev)
+        s=$(echo $revnome | cut -d "-" -f 2 | rev)
+        # echo $s
+        # echo $t 
+    fi 
 
-while read grafo; do
-	# echo $grafo
-    # cut con -d - al reverse (rev) della stringa dopo aver buttato .nde
-    # nomegrafo=${grafo%".nde"} # toglie il suffisso .nde al grafo
-	# echo $ststring
-    revnome=$(echo ${grafo%".nde"} | rev) # reversed name = target-source-revrestonome
-    t=$(echo $revnome | cut -d "-" -f 1)
-    s=$(echo $revnome | cut -d "-" -f 2)
-
-	# echo S==${s} - T==${t}
-
-	while read alg; do
+    while read alg; do
         outname=${alg}-${outnamesuffix}
-        ./${alg} $grafo $s $t $z $timeout >> outname
+        ./${alg} $grafo $s $t $z $timeout >> $outname
 		# ./${alg} $grafo $s $t $z $timeout >> ${alg}-misc-${z}-${timeout}.txt
 	done <$alglist
+done
 
-done <$(ls -p ./preprocessed_datasets | grep -v / )
-# done <$(ls -p ./preprocessed_datasets) # if no subfolders
+
+# while read grafo; do
+# 	# echo $grafo
+#     # cut con -d - al reverse (rev) della stringa dopo aver buttato .nde
+#     # nomegrafo=${grafo%".nde"} # toglie il suffisso .nde al grafo
+# 	# echo $ststring
+#     revnome=$(echo ${grafo%".nde"} | rev) # reversed name = target-source-revrestonome
+#     t=$(echo $revnome | cut -d "-" -f 1)
+#     s=$(echo $revnome | cut -d "-" -f 2)
+
+# 	# echo S==${s} - T==${t}
+
+# 	while read alg; do
+#         outname=${alg}-${outnamesuffix}
+#         ./${alg} $grafo $s $t $z $timeout >> outname
+# 		# ./${alg} $grafo $s $t $z $timeout >> ${alg}-misc-${z}-${timeout}.txt
+# 	done <$alglist
+# done <$(ls -p ./test | grep -v / )
+# done <$(ls -p ./test) # if no subfolders
