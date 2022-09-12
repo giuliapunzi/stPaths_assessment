@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <algorithm>
 #include <unordered_map>
@@ -15,7 +16,7 @@ uint64_t timeMs() {
 
 // #define DEBUG true
 #define DEBUG false
-#define RANDOM_NODE_EXTRACTION
+
 
 using namespace std;
 
@@ -37,7 +38,7 @@ vector<int> low;
 int visit_time;
 vector<bool> is_art_point;
 vector<int> times_art_point; // counts the multiplicity with which a node is art point; this is needed for source multiplicity
-//-------------
+// -----------
 
 struct BCC {
     vector<pair<int,int>> sources; // vector of paths' sources contained in the BCC. Multiplicity will be -1 for sources which are ONLY art points 
@@ -270,6 +271,66 @@ void delete_all(mptnode* tree_node){
 
     return;
 }
+
+// ----------------------------------------------------------------------------------------------------------
+
+
+inline mptnode* pick_random_leaf(){
+    return tree_leaves[rand() % tree_leaves.size()];
+}
+
+
+inline mptnode* pick_smallest_leaf(){
+    int min_size = N+1;
+    mptnode* smallest = tree_leaves[0];
+
+    for(auto x : tree_leaves){
+        if(x->corrBCC->nodes.size() < min_size){
+            min_size = x->corrBCC->nodes.size();
+            smallest = x;
+            if(min_size==2)
+                return smallest;
+        }
+    }
+
+    return smallest;
+}
+
+inline mptnode* pick_biggest_leaf(){
+    int max_size = 0;
+    mptnode* biggest = tree_leaves[0];
+
+    for(auto x : tree_leaves){
+        if(x->corrBCC->nodes.size() > max_size){
+            max_size = x->corrBCC->nodes.size();
+            biggest = x;
+        }
+    }
+
+    return biggest;
+}
+
+
+inline mptnode* pick_maxbound_leaf(){
+    int max_bound = 0;
+    mptnode* boundest = tree_leaves[0];
+
+    for(auto x : tree_leaves){
+        if(x->corrBCC->personalBound > max_bound){
+            max_bound = x->corrBCC->personalBound;
+            boundest = x;
+        }
+    }
+
+    return boundest;
+}
+
+
+inline mptnode* pick_LIFO_leaf(){
+    return tree_leaves[tree_leaves.size()-1];
+}
+
+
 
 void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neighbors, int og_multiplicity)
 {   
@@ -1023,10 +1084,12 @@ bool assess_paths(mptnode* current_node){
 
     while (running_bound < z){
 
+        if(tree_leaves.size() == 0)
+            throw logic_error("Leaves' array cannot be empty before terminating");
+
         if(MAX_TIME>0 && timeMs() - assess_start > MAX_TIME)
             return running_bound >= z;
 
-        calls_performed++;
         // if we are at the root of the tree, we are done
         if(current_node == mptree){
             if(tree_leaves.size() == 1 && current_node->children.size() == 0){
@@ -1039,8 +1102,9 @@ bool assess_paths(mptnode* current_node){
                 while (current_node == mptree)
                 {
                     // choose the next current node at random from the leaves
-                    leaf_index = rand() % tree_leaves.size();
-                    current_node = tree_leaves[leaf_index];
+                    current_node = pick_random_leaf();
+                    // leaf_index = rand() % tree_leaves.size();
+                    // current_node = tree_leaves[leaf_index];
                 }
             }
         }
@@ -1056,6 +1120,8 @@ bool assess_paths(mptnode* current_node){
             printSemiLeaves();
         }
 
+        calls_performed++;
+
         explode(current_node); // explode also removes from leaves
         // cout << endl << endl<< "Finished one explosion"<<endl<<flush;
         // printMPtree(mptree);
@@ -1067,8 +1133,9 @@ bool assess_paths(mptnode* current_node){
         }
 
         // choose the next current node at random from the leaves
-        leaf_index = rand() % tree_leaves.size();
-        current_node = tree_leaves[leaf_index];
+        current_node = pick_random_leaf();
+        // leaf_index = rand() % tree_leaves.size();
+        // current_node = tree_leaves[leaf_index];
         // tree_leaves.erase(tree_leaves.begin() + leaf_index);
  
 
@@ -1086,12 +1153,15 @@ bool assess_paths(mptnode* current_node){
 
 int main(int argc, char** argv) { 
     if(argc < 5){
-        cout << "USAGE: " << argv[0] << " <graph-filename> <source> <target> <z> [MAX_TIME]\n";
+        cout << "USAGE: " << argv[0] << " <graph-filename> <source> <target> <z> [MAX_TIME] [OUTPUT_FILENAME]\n";
         return 0;
     }
 
+    string outname;
+
 
     if(argc >= 6) MAX_TIME = atoi(argv[5])*1000;
+    
 
     s = atoi(argv[2]);
     t = atoi(argv[3]);
@@ -1145,7 +1215,14 @@ int main(int argc, char** argv) {
     // else    
     //     cout << "The paths are exactly " << running_bound << " < z=" << z << endl;
 
-    cout << endl << "Assessment: "<< argv[1] << " "<< N << " " << M <<  " " << s << " " << t_og << "; " << duration << " " << calls_performed  << " " << running_bound << " "<< z << endl;
+    if(argc >= 7){
+        ofstream output_graph;
+        output_graph.open(argv[6]);
+        output_graph << endl << "Assessment: "<< argv[1] << " "<< N << " " << M <<  " " << s << " " << t_og << "; " << duration << " " << calls_performed  << " " << running_bound << " "<< z << " " << running_bound/duration << endl;
+        output_graph.close();
+    }
+    else
+        cout << endl << "Assessment: "<< argv[1] << " "<< N << " " << M <<  " " << s << " " << t_og << "; " << duration << " " << calls_performed  << " " << running_bound << " "<< z << " " << running_bound/duration <<endl;
 
 
     delete_all(mptree);

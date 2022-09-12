@@ -378,7 +378,7 @@ short PATHS(int v){
 int main(int argc, char * argv[]){
     
     if(argc < 5){
-        cout << "USAGE: " << argv[0] << " <graph> <source> <target> <z> [MAX_TIME]\n";
+        cout << "USAGE: " << argv[0] << " <graph> <source> <target> <z> [MAX_TIME] [output_filename]\n";
         return 0;
     }
 
@@ -444,10 +444,19 @@ int main(int argc, char * argv[]){
     PATHS(SOURCE);
 
     uint64_t duration = (timeMs() - start_time);
+
+    if(argc >= 7){
+        ofstream output_graph;
+        output_graph.open(argv[6]);
+        cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << "  " << z << " " << all_paths/duration << endl;
+        output_graph.close();
+    }
+    else
+        cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << "  " << z << " " << all_paths/duration << endl;
+
     
     // cout << "DONE! time: " << duration << "ms, rec calls: "<< calls_performed << ", paths: " << all_paths << endl;
-    cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << "  " << z << endl;
-
+    
 
 /*****
     enumerate_paths(0, G.size()-1);

@@ -396,7 +396,7 @@ int main(int argc, char** argv) {
         // int inlen = sizeof(argv[1])/sizeof(*argv[1]);
         // cout << "size is " << inname.length() << endl;
 
-        outname = "";
+        outname = "./preprocessed_datasets/";
         // cout << "outname=" << outname << endl << flush;
 
         for(int i=0; i<inname.length()-4; i++)
