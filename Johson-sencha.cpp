@@ -333,7 +333,7 @@ bool abort_alg = false;
 long calls_performed=0;
 vector<int> bound_measure;
 vector<int> time_measure;
-vector<int> it_measure;
+vector<long> it_measure;
 
 long threshold = 10000;
 
@@ -343,9 +343,14 @@ short PATHS(int v){
 
     if(timeMs() - start_time > threshold){
         // cout << "lb="<< running_bound<< "; calls=" << calls_performed << "; t="<< timeMs() - assess_start << "\t\t";
-        bound_measure.push_back(all_paths);
-        time_measure.push_back(timeMs() - start_time);
-        it_measure.push_back(calls_performed);
+        // bound_measure.push_back(all_paths);
+        // time_measure.push_back(timeMs() - start_time);
+        // it_measure.push_back(calls_performed);
+
+        struct rusage usage_output;
+        getrusage(RUSAGE_SELF, &usage_output);
+        cout << timeMs() - start_time << "\t" << all_paths << "\t"<< calls_performed << "\t" << usage_output.ru_maxrss << endl;
+
         threshold+=10000;
     }
 
@@ -465,7 +470,7 @@ int main(int argc, char * argv[]){
     if(argc >= 7){
         ofstream output_graph;
         output_graph.open(argv[6]);
-        cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << " " << z << " " << all_paths/duration << endl;
+        output_graph << endl << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << " " << z << " " << all_paths/duration << endl;
         output_graph << "Memory usage: " << usage_output.ru_maxrss << "kB"<< endl;
         for(int i=0;i<time_measure.size(); i++){
             output_graph << time_measure[i] << "\t"  << bound_measure[i] << "\t" << it_measure[i] << endl;
@@ -474,10 +479,10 @@ int main(int argc, char * argv[]){
     }
     else{
         cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << " " << z << " " << all_paths/duration << endl;
-        cout << "Memory usage: " << usage_output.ru_maxrss << "kB"<< endl;
-        for(int i=0;i<time_measure.size(); i++){
-            cout << time_measure[i] << "\t"  << bound_measure[i] << "\t" << it_measure[i] << endl;
-        }
+        cout << "Memory usage: " << usage_output.ru_maxrss/1000 << "MB"<< endl<<endl;
+        // for(int i=0;i<time_measure.size(); i++){
+        //     cout << time_measure[i] << "\t"  << bound_measure[i] << "\t" << it_measure[i] << endl;
+        // }
     }
     
     // cout << "DONE! time: " << duration << "ms, rec calls: "<< calls_performed << ", paths: " << all_paths << endl;

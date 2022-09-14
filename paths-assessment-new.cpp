@@ -20,7 +20,7 @@ uint64_t timeMs() {
 
 // #define CHOICE 'b' //choices: 'r'=random, 'm'=min, 'x' = max, 'b' = max bound, 'l'= LIFO 
 
-char CHOICE ='r'; // default choice is random; choices are :  'r'=random, 'm'=min, 'x' = max, 'b' = max bound, 'l'= LIFO 
+// char CHOICE ='r'; // default choice is random; choices are :  'r'=random, 'm'=min, 'x' = max, 'b' = max bound, 'l'= LIFO 
 
 using namespace std;
 
@@ -31,9 +31,18 @@ int s, t; // original source and target for st-paths problem
 int z; // value to assess for
 long MAX_TIME = -1;
 unsigned long running_bound = 1;
+
+
+//---------------global vectors and variables for logs
 unsigned long calls_performed = 0;
-vector<int> bound_per_iteration;
-vector<int> time_per_iteration;
+// vector<int> time_measure;
+// vector<int> bound_measure;
+// vector<int> it_measure;
+// vector<long> mem_measure;
+int tree_size;
+int max_comp_size;
+int min_comp_size;
+// ----------------------
 
 
 // ----------- global vectors for findBCCs
@@ -282,7 +291,47 @@ void delete_all(mptnode* tree_node){
     return;
 }
 
-// ----------------------------------------------------------------------------------------------------------
+
+int subtree_size(mptnode* tree_node){
+    int tree_size = 1;
+    for(auto c : tree_node->children)
+        tree_size+= subtree_size(c);
+
+    return tree_size;
+}
+
+
+pair<int,int> subtree_min_max(mptnode* tree_node){
+    int tree_min = tree_node->corrBCC->nodes.size();
+    int tree_max = tree_node->corrBCC->nodes.size();
+
+    for(auto c : tree_node->children){
+        pair<int,int> subvals = subtree_min_max(c);
+        if(subvals.first < tree_min)
+            tree_min = subvals.first;
+        if(subvals.second > tree_max)
+            tree_max = subvals.second;
+    }
+
+    return make_pair(tree_min, tree_max);
+}
+
+pair<int,int> tree_min_max(){
+    int tree_min = N; // initialize like this as root component is not indicative
+    int tree_max = 0;
+    for(auto c : mptree->children){
+        pair<int,int> subvals = subtree_min_max(c);
+        if(subvals.first < tree_min)
+            tree_min = subvals.first;
+        if(subvals.second > tree_max)
+            tree_max = subvals.second;
+    }
+
+    return make_pair(tree_min, tree_max);
+}
+
+
+// -------------------------------------- LEAF PICKING STRATEGIES ---------------------------
 
 
 inline mptnode* pick_random_leaf(){
@@ -295,6 +344,7 @@ inline mptnode* pick_smallest_leaf(){
     mptnode* smallest = tree_leaves[0];
 
     for(auto x : tree_leaves){
+    
         if(x->corrBCC->nodes.size() < min_size){
             min_size = x->corrBCC->nodes.size();
             smallest = x;
@@ -311,12 +361,14 @@ inline mptnode* pick_biggest_leaf(){
     mptnode* biggest = tree_leaves[0];
 
     for(auto x : tree_leaves){
+        // cout << x->corrBCC->nodes.size()<< "\t";
         if(x->corrBCC->nodes.size() > max_size){
             max_size = x->corrBCC->nodes.size();
             biggest = x;
         }
     }
 
+    // cout << endl;
     return biggest;
 }
 
@@ -356,7 +408,9 @@ inline mptnode* pick_LIFO_leaf(){
     return tree_leaves[tree_leaves.size()-1];
 }
 
+auto leaf_choice_f = pick_random_leaf;
 
+// ----------------------------------------------------------------
 
 void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neighbors, int og_multiplicity)
 {   
@@ -1133,11 +1187,12 @@ void explode(mptnode* leaf_node){
     return;
 }
 
-long threshold= 1000;
+long threshold= 10000;
 
 bool assess_paths(mptnode* current_node){
     auto leaf_it = find(tree_leaves.begin(), tree_leaves.end(), current_node);
     int leaf_index = leaf_it - tree_leaves.begin();
+    struct rusage usage_output;
 
     uint64_t assess_start = timeMs();
 
@@ -1146,6 +1201,10 @@ bool assess_paths(mptnode* current_node){
             throw logic_error("Leaves' array cannot be empty before terminating");
 
         if(MAX_TIME>0 && timeMs() - assess_start > MAX_TIME)
+            return running_bound >= z;
+
+        getrusage(RUSAGE_SELF, &usage_output); // measure memory usage 
+        if(usage_output.ru_maxrss>400000000) // if usage greater than about 400GB, return
             return running_bound >= z;
 
         // if we are at the root of the tree, we are done
@@ -1160,23 +1219,7 @@ bool assess_paths(mptnode* current_node){
                 while (current_node == mptree)
                 {
                     // choose the next current node with the selected choice strategy from the leaves
-                    switch (CHOICE)
-                    {
-                        case 'm':
-                            current_node = pick_smallest_leaf();
-                        case 'x':              
-                            current_node = pick_biggest_leaf();
-                        case 'b':
-                            current_node = pick_maxbound_leaf();
-                        case 'l':
-                            current_node = pick_LIFO_leaf();
-                        case 'r':
-                            current_node = pick_random_leaf();
-                        default:
-                            current_node = pick_random_leaf();
-                    }
-                    // leaf_index = rand() % tree_leaves.size();
-                    // current_node = tree_leaves[leaf_index];
+                    current_node = leaf_choice_f();
                 }
             }
         }
@@ -1192,6 +1235,8 @@ bool assess_paths(mptnode* current_node){
             printSemiLeaves();
         }
 
+        
+
         calls_performed++;
 
         explode(current_node); // explode also removes from leaves
@@ -1204,22 +1249,14 @@ bool assess_paths(mptnode* current_node){
             cout << endl;
         }
 
+        // printMPtree(mptree);
+        // cout << endl;
+
         // choose the next current node at random from the leaves
-        switch (CHOICE)
-        {
-            case 'm':
-                current_node = pick_smallest_leaf();
-            case 'x':              
-                current_node = pick_biggest_leaf();
-            case 'b':
-                current_node = pick_maxbound_leaf();
-            case 'l':
-                current_node = pick_LIFO_leaf();
-            case 'r':
-                current_node = pick_random_leaf();
-            default:
-                current_node = pick_random_leaf();
-        }
+        current_node = leaf_choice_f();
+
+        // cout << "ID of chosen leaf: "  << current_node->corrID << endl;
+
         // leaf_index = rand() % tree_leaves.size();
         // current_node = tree_leaves[leaf_index];
 
@@ -1232,14 +1269,34 @@ bool assess_paths(mptnode* current_node){
         // cout << "Updated running bound: "<< running_bound <<endl;
 
         
-        if(running_bound>threshold){
-            cout << "lb="<< running_bound<< "; calls=" << calls_performed << "; t="<< timeMs() - assess_start << "\t\t";
-            threshold*=10;
+        // if(running_bound>threshold){
+        //     cout << "lb="<< running_bound<< "; calls=" << calls_performed << "; t="<< timeMs() - assess_start << "\t\t";
+        //     threshold*=10;
+        // }
+        if(timeMs() - assess_start > threshold){
+            // cout << "lb="<< running_bound<< "; calls=" << calls_performed << "; t="<< timeMs() - assess_start << "\t\t";
+            // bound_measure.push_back(running_bound);
+            // time_measure.push_back(timeMs() - assess_start);
+            // it_measure.push_back(calls_performed);
+            getrusage(RUSAGE_SELF, &usage_output); // measure memory usage 
+            // mem_measure.push_back(usage_output.ru_maxrss);
+
+            int tree_size = 1;
+            for(auto c : mptree->children)
+                tree_size+= subtree_size(c);
+
+            pair<int,int> minmax = tree_min_max();
+
+            cout << timeMs() - assess_start << "\t" << running_bound << "\t"<< calls_performed << "\t" << usage_output.ru_maxrss << "\t"<< tree_size << "\t"<< usage_output.ru_maxrss/tree_size << "\t" << minmax.first << "\t" << minmax.second << "\t" << (minmax.second -minmax.first)/tree_size << endl;
+
+            // also measure size of tree
+            threshold+=10000;
         }
     }
 
     return true; // exited while bound < z
 }
+
 
 int main(int argc, char** argv) { 
     if(argc < 5){
@@ -1248,10 +1305,14 @@ int main(int argc, char** argv) {
     }
 
     string outname;
+    char CHOICE = 'r';
 
 
-    if(argc >= 6) MAX_TIME = atoi(argv[5])*1000;
-    if(argc >= 7) CHOICE = atoi(argv[6]);
+
+    if(argc >= 6) {
+        MAX_TIME = atoi(argv[5])*1000;
+    }
+    if(argc >= 7) CHOICE = argv[6][0];
 
     s = atoi(argv[2]);
     t = atoi(argv[3]);
@@ -1294,32 +1355,66 @@ int main(int argc, char** argv) {
     // cout << "Ending running bound: "<< running_bound <<endl;
     tree_leaves.push_back(graph_node);
 
+    // cout << "Choice is " << CHOICE << "and argv is "<< argv[6] << endl;
+    // choose the next current node at random from the leaves
+    switch (CHOICE)
+    {
+        case 'm':
+            leaf_choice_f = pick_smallest_leaf;
+            cout << "Choice: minimum" <<endl;
+            break;
+        case 'x':              
+            leaf_choice_f = pick_biggest_leaf;
+            cout << "Choice: maximum" <<endl;
+            break;
+        case 'b':
+            leaf_choice_f = pick_maxbound_leaf;
+            cout << "Choice: max bound" <<endl;
+            break;
+        case 'l':
+            leaf_choice_f = pick_LIFO_leaf;
+            cout << "Choice: LIFO" <<endl;
+            break;
+        case 'r':
+            leaf_choice_f = pick_random_leaf;
+            cout << "Choice: random" <<endl;
+            break;
+        default:
+            leaf_choice_f = pick_random_leaf;
+            cout << "Choice: random" <<endl;
+    }
+
     uint64_t start_time = timeMs();
     bool enough = assess_paths(graph_node);
     uint64_t duration = (timeMs() - start_time);
 
-    // cout << "Elapsed time: " << duration << "ms"  << endl;
+    // cout << "Elapsed time: " << duration << "ms"  << endl<<flush;
 
     // if(enough)
     //     cout << "The paths are at least z=" << z << endl;
     // else    
     //     cout << "The paths are exactly " << running_bound << " < z=" << z << endl;
 
-    struct rusage* usage_output;
-    int usageint = getrusage(RUSAGE_SELF, usage_output);
-
-    cout << "Usage: " << usageint << " " << usage_output->ru_utime.tv_sec << " " << usage_output->ru_stime.tv_sec << " " << usage_output->ru_maxrss << " " << usage_output->ru_ixrss << " " << usage_output->ru_idrss << " " << usage_output->ru_isrss << " " << usage_output->ru_minflt << " " << usage_output->ru_majflt << endl;
-    cout << usage_output->ru_nswap << " " << usage_output->ru_inblock << " " << usage_output->ru_oublock << " " << usage_output->ru_msgsnd << " " << usage_output->ru_msgrcv << " " << usage_output->ru_nsignals << " " << usage_output->ru_nvcsw << " " << usage_output->ru_nivcsw << endl;
+    struct rusage usage_output;
+    int usageint = getrusage(RUSAGE_SELF, &usage_output); // measure memory usage 
 
     if(argc >= 8){
         ofstream output_graph;
         output_graph.open(argv[7]);
         output_graph << endl << "Assessment: "<< argv[1] << " "<< N << " " << M <<  " " << s << " " << t_og << "; " << duration << " " << calls_performed  << " " << running_bound << " "<< z << " " << running_bound/duration << endl;
+        output_graph << "Memory usage: " << usage_output.ru_maxrss/1000 << "MB"<< endl;
+        // for(int i=0;i<time_measure.size(); i++){
+        //     output_graph << time_measure[i] << "\t"  << bound_measure[i] << "\t" << it_measure[i] << endl;
+        // }
         output_graph.close();
     }
-    else
-        cout << endl << "Assessment: "<< argv[1] << " "<< N << " " << M <<  " " << s << " " << t_og << "; " << duration << " " << calls_performed  << " " << running_bound << " "<< z << " " << running_bound/duration <<endl;
-
+    else {
+        cout << "Assessment: "<< argv[1] << " "<< N << " " << M <<  " " << s << " " << t_og << "; " << duration << " " << calls_performed  << " " << running_bound << " "<< z << " " << running_bound/duration <<endl;
+        cout << "Memory usage: " << usage_output.ru_maxrss/1000 << "MB"<< endl<<endl;
+        // for(int i=0;i<time_measure.size(); i++){
+        //     cout << time_measure[i] << "\t"  << bound_measure[i] << "\t" << it_measure[i] << endl;
+        // }
+    }
 
     delete_all(mptree);
 
