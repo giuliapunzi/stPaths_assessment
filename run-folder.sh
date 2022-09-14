@@ -12,10 +12,10 @@ alglist=$1
 z=$2
 timeout=$3 
 
-if (($# >= 5)); then
+if (($# >= 4)); then
     outnamesuffix=$4
 else 
-    outnamesuffix="misc-${z}-${timeout}.txt"
+    outnamesuffix=misc-${z}-${timeout}.txt
 fi
 
 
@@ -37,6 +37,7 @@ for grafo in ./test/*; do
         outname=${alg}-${outnamesuffix}
         ./${alg} $grafo $s $t $z $timeout >> $outname
 		# ./${alg} $grafo $s $t $z $timeout >> ${alg}-misc-${z}-${timeout}.txt
+        # echo $outname
 	done <$alglist
 done
 
