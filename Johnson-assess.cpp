@@ -448,11 +448,11 @@ int main(int argc, char * argv[]){
     if(argc >= 7){
         ofstream output_graph;
         output_graph.open(argv[6]);
-        cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << "  " << z << " " << all_paths/duration << endl;
+        cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << " " << z << " " << all_paths/duration << endl;
         output_graph.close();
     }
     else
-        cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << "  " << z << " " << all_paths/duration << endl;
+        cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << " " << z << " " << all_paths/duration << endl;
 
     
     // cout << "DONE! time: " << duration << "ms, rec calls: "<< calls_performed << ", paths: " << all_paths << endl;
