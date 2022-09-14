@@ -17,6 +17,8 @@ uint64_t timeMs() {
 // #define DEBUG true
 #define DEBUG false
 
+#define CHOICE 'b' //choices: 'r'=random, 'm'=min, 'x' = max, 'b' = max bound, 'l'= LIFO 
+
 
 using namespace std;
 
@@ -311,13 +313,29 @@ inline mptnode* pick_biggest_leaf(){
 }
 
 
-inline mptnode* pick_maxbound_leaf(){
+// we actually should choose max prod ancestors!!
+inline mptnode* pick_maxpersonal_leaf(){
     int max_bound = 0;
     mptnode* boundest = tree_leaves[0];
 
     for(auto x : tree_leaves){
         if(x->corrBCC->personalBound > max_bound){
             max_bound = x->corrBCC->personalBound;
+            boundest = x;
+        }
+    }
+
+    return boundest;
+}
+
+
+inline mptnode* pick_maxbound_leaf(){
+    int max_bound = 0;
+    mptnode* boundest = tree_leaves[0];
+
+    for(auto x : tree_leaves){
+        if(x->corrBCC->prodAncestors > max_bound){
+            max_bound = x->corrBCC->prodAncestors;
             boundest = x;
         }
     }
@@ -1101,8 +1119,22 @@ bool assess_paths(mptnode* current_node){
                 throw logic_error("Root added as leaf when tree is non-empty");
                 while (current_node == mptree)
                 {
-                    // choose the next current node at random from the leaves
-                    current_node = pick_random_leaf();
+                    // choose the next current node with the selected choice strategy from the leaves
+                    switch (CHOICE)
+                    {
+                        case 'm':
+                            current_node = pick_smallest_leaf();
+                        case 'x':              
+                            current_node = pick_biggest_leaf();
+                        case 'b':
+                            current_node = pick_maxbound_leaf();
+                        case 'l':
+                            current_node = pick_LIFO_leaf();
+                        case 'r':
+                            current_node = pick_random_leaf();
+                        default:
+                            current_node = pick_random_leaf();
+                    }
                     // leaf_index = rand() % tree_leaves.size();
                     // current_node = tree_leaves[leaf_index];
                 }
@@ -1133,7 +1165,25 @@ bool assess_paths(mptnode* current_node){
         }
 
         // choose the next current node at random from the leaves
-        current_node = pick_random_leaf();
+        switch (CHOICE)
+        {
+            case 'm':
+                current_node = pick_smallest_leaf();
+            case 'x':              
+                current_node = pick_biggest_leaf();
+            case 'b':
+                current_node = pick_maxbound_leaf();
+            case 'l':
+                current_node = pick_LIFO_leaf();
+            case 'r':
+                current_node = pick_random_leaf();
+            default:
+                current_node = pick_random_leaf();
+        }
+        // leaf_index = rand() % tree_leaves.size();
+        // current_node = tree_leaves[leaf_index];
+
+        // current_node = pick_random_leaf();
         // leaf_index = rand() % tree_leaves.size();
         // current_node = tree_leaves[leaf_index];
         // tree_leaves.erase(tree_leaves.begin() + leaf_index);
