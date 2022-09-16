@@ -24,7 +24,7 @@ long MAX_TIME = -1;
 
 int SOURCE;
 int TARGET;
-int z;
+long long z;
 
 ///////////////////////////////////////////////////////////
 
@@ -336,12 +336,15 @@ vector<int> time_measure;
 vector<long> it_measure;
 
 long threshold = 10000;
+int num_it = 100;
 
 short PATHS(int v){
     if(all_paths >= z)
         return true;
+    
 
     if(timeMs() - start_time > threshold){
+    // if(calls_performed > num_it){ // every 100 iterations
         // cout << "lb="<< running_bound<< "; calls=" << calls_performed << "; t="<< timeMs() - assess_start << "\t\t";
         // bound_measure.push_back(all_paths);
         // time_measure.push_back(timeMs() - start_time);
@@ -352,6 +355,7 @@ short PATHS(int v){
         cout << timeMs() - start_time << "\t" << all_paths << "\t"<< calls_performed << "\t" << usage_output.ru_maxrss << endl;
 
         threshold+=10000;
+        num_it+=100;
     }
 
     calls_performed++;
@@ -405,7 +409,7 @@ int main(int argc, char * argv[]){
 
     SOURCE = atoi(argv[2]);
     TARGET = atoi(argv[3]);
-    z = atoi(argv[4]);
+    z = atol(argv[4]);
 
     // cout << "G: " << argv[1] << " S: " << SOURCE << " T: " << TARGET;
 
@@ -443,13 +447,14 @@ int main(int argc, char * argv[]){
     //         visited[i] = false;
     // }
 
-    // chech reachability of s from t
-    DFS_iter(TARGET);
 
-    if(!reachable[SOURCE]){
-        cout << "Node s is not reachable from t" << endl;
-        return 0;
-    }
+    // chech reachability of s from t -- NOT NEEDED IN THIS APPLICATION 
+    // DFS_iter(TARGET);
+
+    // if(!reachable[SOURCE]){
+    //     cout << "Node s is not reachable from t" << endl;
+    //     return 0;
+    // }
     
 
     start_time = timeMs();
@@ -460,6 +465,10 @@ int main(int argc, char * argv[]){
         blocked.push_back(0);
         B.push_back(new unordered_set<int>());
     }
+
+    cout << "Time\tBound\tCalls\tMem" << endl;
+
+
     PATHS(SOURCE);
 
     uint64_t duration = (timeMs() - start_time);
