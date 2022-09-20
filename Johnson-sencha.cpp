@@ -476,6 +476,8 @@ int main(int argc, char * argv[]){
     struct rusage usage_output;
     int usageint = getrusage(RUSAGE_SELF, &usage_output); // measure memory usage 
 
+    cout << duration << "\t" << all_paths << "\t"<< calls_performed << "\t" << usage_output.ru_maxrss << endl;
+
     if(argc >= 7){
         ofstream output_graph;
         output_graph.open(argv[6]);

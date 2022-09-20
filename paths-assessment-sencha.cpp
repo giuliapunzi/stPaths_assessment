@@ -31,7 +31,7 @@ int maxID = 0; // maximum ID of a BCC
 int s, t; // original source and target for st-paths problem
 long long z; // value to assess for
 long MAX_TIME = -1;
-unsigned long running_bound = 1;
+unsigned long long running_bound = 1;
 
 
 //---------------global vectors and variables for logs
@@ -60,10 +60,10 @@ vector<int> induced_nodes;
 // -----------
 
 struct BCC {
-    vector<pair<int,int>> sources; // vector of paths' sources contained in the BCC. Multiplicity will be -1 for sources which are ONLY art points 
+    vector<pair<int,long>> sources; // vector of paths' sources contained in the BCC. Multiplicity will be -1 for sources which are ONLY art points 
     int target; // target of the BCC = only articulation point leading to t 
     long personalBound; // personal bound of current BCC = |edges| - |nodes| + 1
-    int bound_multiplier; // multiplier given by the number of sources and their multiplicity; this influences the whole leaf-to-root path
+    long bound_multiplier; // multiplier given by the number of sources and their multiplicity; this influences the whole leaf-to-root path
     long prodAncestors; // product of the personal bounds of all BCCs in the bead string from current to root
     int myID; // personal ID of the BCC
     bool isLeaf; // true iff the BCC is a leaf of the block-cut tree
@@ -92,7 +92,7 @@ mptnode* mptree; // global structure; this is a pointer to the root of the multi
 // vector<BCC*> tree_leaves; // vector of pointers to BCC leaves of the multisource paths tree  
 // vector<BCC*> all_tree_nodes; // all the BCCs composing the multisource paths tree
 
-long inline leaf_to_root_bound(mptnode* tree_node){
+long long inline leaf_to_root_bound(mptnode* tree_node){
     return tree_node->corrBCC->personalBound*tree_node->corrBCC->prodAncestors*tree_node->corrBCC->bound_multiplier;
 }
 
@@ -175,6 +175,7 @@ void create_graph(char* filename)
     dummyBCC->edges[t].push_back(N);
     dummyBCC->edges[N].push_back(t);    
     dummyBCC->num_edges = 1;
+    dummyBCC->isLeaf = false;
     
     t = N;
 
@@ -495,9 +496,9 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                     
                     // multiplicity of the node is -1 if it is an art point; otherwise it is the multiplicity
                     // of the just-removed source summed to the possible multiplicity x could have, if it was a source of B
-                    int source_multiplicity = 0;
+                    long source_multiplicity = 0;
                     bool art_pt = is_art_point[x];
-                    vector<pair<int,int>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&x](const pair<int,int> &p){return p.first==x;});
+                    vector<pair<int,long>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&x](const pair<int,long> &p){return p.first==x;});
                     bool old_source = (find_if_source != B->sources.end());
                     bool source_neigh = (find(source_neighbors.begin(), source_neighbors.end(), x) != source_neighbors.end());
 
@@ -526,9 +527,9 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 
                 // multiplicity of the node is -1 if it is an art point; otherwise it is the multiplicity
                 // of the just-removed source summed to the possible multiplicity v could have, if it was a source of B
-                int source_multiplicity = 0;
+                long source_multiplicity = 0;
                 bool art_pt = is_art_point[v];
-                vector<pair<int,int>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&v](const pair<int,int> &p){return p.first==v;});
+                vector<pair<int,long>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&v](const pair<int,long> &p){return p.first==v;});
                 bool old_source = (find_if_source != B->sources.end());
                 bool source_neigh = (find(source_neighbors.begin(), source_neighbors.end(), v) != source_neighbors.end());
 
@@ -581,8 +582,9 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 }
                 current_BCC->num_edges = current_BCC->num_edges/2;
                 // PERSONAL BOUND MUST BE CYCLOMATIC MULTIPLIED FOR THE NUMBER OF "VALID" SOURCES = NOT CONTAINING -1
-                // int cyclomatic_bound = current_BCC->num_edges - current_BCC->nodes.size() + 1; // initialize personal bound
-                current_BCC->personalBound = current_BCC->num_edges - current_BCC->nodes.size() + 1; 
+                // int cyclomatic_bound = current_BCC->num_edges - current_BCC->nodes.size() + 2; // initialize personal bound
+                current_BCC->personalBound = current_BCC->num_edges - current_BCC->nodes.size() + 2; 
+                // current_BCC->personalBound = 1;
 
                 if(current_BCC->nodes.size() == 2) current_BCC->personalBound = 1;
 
@@ -604,7 +606,7 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 // if(DEBUG) cout << "Personal bound is " << current_BCC->personalBound <<endl;
 
                 // also, set up if it is a leaf: that is, if it ONLY has sources with multiplicity > 0, that is, they are neighbors of the source
-                if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [](const pair<int, int>& p){return p.second == -1;}) == current_BCC->sources.end())
+                if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [](const pair<int, long>& p){return p.second == -1;}) == current_BCC->sources.end())
                     current_BCC->isLeaf = true;
 
 
@@ -730,7 +732,11 @@ void update_tree(BCC* newB, vector<BCC*> &decomposed_BCC, mptnode* node_to_repla
             // if(DEBUG) cout << "Size of tree leaves: " << tree_leaves.size() << endl;
         }
 
-        if(children_count > 0 && current_node->corrBCC->isLeaf) { // if the corresponding BCC is leaf but it is not an actual tree leaf, then current node is a semi-leaf of the tree
+        // if(children_count > 0 && current_node->corrBCC->isLeaf) { // if the corresponding BCC is leaf but it is not an actual tree leaf, then current node is a semi-leaf of the tree
+        //     tree_semi_leaves.push_back(current_node);
+        // }
+        // THE ABOVE WAS WRONG: corrBCC IS LEAF IF IT ONLY HAS SOURCES WITH MULTIPLICITY >0! CORRECT NOTION IS IF THE MULTIPLIER OF THE BCC IS >0, 
+        if(children_count > 0 && current_node->corrBCC->bound_multiplier>0) { // if the corresponding BCC is leaf but it is not an actual tree leaf, then current node is a semi-leaf of the tree
             tree_semi_leaves.push_back(current_node);
         }
     }
@@ -788,7 +794,7 @@ void explode(mptnode* leaf_node){
 
         // find the source of the parent that corresponds to the target of B
         mptnode * parent_node = leaf_node->parent;
-        vector<pair<int,int>>::iterator find_source = find_if(parent_node->corrBCC->sources.begin(), parent_node->corrBCC->sources.end(), [&B](const pair<int,int> p){return p.first == B->target;});
+        vector<pair<int,long>>::iterator find_source = find_if(parent_node->corrBCC->sources.begin(), parent_node->corrBCC->sources.end(), [&B](const pair<int,long> p){return p.first == B->target;});
         if(find_source == parent_node->corrBCC->sources.end())
             throw logic_error("Target of child node is not a source of parent node");
 
@@ -846,10 +852,10 @@ void explode(mptnode* leaf_node){
 
     // choose a source at random 
     int sIndex = rand() % B->sources.size();
-    pair<int,int> sBpair = B->sources[sIndex];
+    pair<int,long> sBpair = B->sources[sIndex];
 
     // remember multiplicity of s, as it will be the starting one of all its neighbors
-    int og_multiplicity = sBpair.second;
+    long og_multiplicity = sBpair.second;
     int sB = sBpair.first;
 
     if(og_multiplicity == -1){ // the BCC had children BCCs
@@ -960,9 +966,14 @@ void explode(mptnode* leaf_node){
             running_bound -= leaf_to_root_bound(tree_semi_leaves[semi_leaf_index]); // remove from bound before changing multiplicity
             
             if(DEBUG) cout << "Running bound decreased by " << leaf_to_root_bound(tree_semi_leaves[semi_leaf_index]) << " (contribution of parent semi leaf node)" << endl;
+        } // otherwise should it be added as a semi-leaf
+        else{
+            // add the parent to semi-leaves, and set semi_leaf_index to the last position, so that we add its bound right away
+            tree_semi_leaves.push_back(leaf_node->parent);
+            semi_leaf_index=tree_semi_leaves.size()-1;
         }
 
-        auto update_it = find_if(source_to_update->sources.begin(), source_to_update->sources.end(), [& newB](const pair<int,int> p){return p.first == newB->target;}); // find position of source to update
+        auto update_it = find_if(source_to_update->sources.begin(), source_to_update->sources.end(), [& newB](const pair<int,long> p){return p.first == newB->target;}); // find position of source to update
         // now, check if pair has -1 as second element, change it to og multiplicity, otherwise increase it by og multiplicity. Also, increase multiplier by og multiplicity in any case
         if(source_to_update->sources[update_it - source_to_update->sources.begin()].second == -1)
             source_to_update->sources[update_it - source_to_update->sources.begin()].second = og_multiplicity;
@@ -971,11 +982,11 @@ void explode(mptnode* leaf_node){
 
         source_to_update->bound_multiplier+=og_multiplicity;
 
-        if(changed_semi_leaf){
+        // if(changed_semi_leaf){
             running_bound+=leaf_to_root_bound(tree_semi_leaves[semi_leaf_index]); // re-add contribution after changing multiplicity
             
             if(DEBUG) cout << "Running bound increased by " << leaf_to_root_bound(tree_semi_leaves[semi_leaf_index]) << " (contribution of parent semi leaf node after adjusting parameters)" << endl;
-        }
+        // }
     }
     
     // initialize support vectors for findBCC
@@ -1020,9 +1031,9 @@ void explode(mptnode* leaf_node){
 
             // multiplicity of the node is -1 if it is an art point; otherwise it is the multiplicity
             // of the just-removed source summed to the possible multiplicity x could have, if it was a source of B
-            int source_multiplicity = 0;
+            long source_multiplicity = 0;
             bool art_pt = is_art_point[stack_el];
-            vector<pair<int,int>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&stack_el](const pair<int,int> &p){return p.first==stack_el;});
+            vector<pair<int,long>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&stack_el](const pair<int,long> &p){return p.first==stack_el;});
             bool old_source = (find_if_source != B->sources.end());
             bool source_neigh = (find(source_neighbors.begin(), source_neighbors.end(), stack_el) != source_neighbors.end());
 
@@ -1072,8 +1083,10 @@ void explode(mptnode* leaf_node){
         current_BCC->num_edges = current_BCC->num_edges/2;
 
         // PERSONAL BOUND MUST BE CYCLOMATIC MULTIPLIED FOR THE NUMBER OF "VALID" SOURCES = NOT CONTAINING -1
-        // int cyclomatic_bound = current_BCC->num_edges - current_BCC->nodes.size() + 1; // initialize personal bound
-        current_BCC->personalBound = current_BCC->num_edges - current_BCC->nodes.size() + 1; 
+        // int cyclomatic_bound = current_BCC->num_edges - current_BCC->nodes.size() + 2; // initialize personal bound
+        current_BCC->personalBound = current_BCC->num_edges - current_BCC->nodes.size() + 2; 
+        // current_BCC->personalBound = 1;
+
         if(current_BCC->nodes.size() == 2) current_BCC->personalBound = 1;
 
         bool only_art_pts = true;
@@ -1093,7 +1106,7 @@ void explode(mptnode* leaf_node){
         
 
         // also, set up if it is a leaf: that is, if it ONLY has sources with multiplicity > 0, that is, they are neighbors of the source
-        if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [&current_BCC](const pair<int, int>& p){return p.second == -1;}) == current_BCC->sources.end()){
+        if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [&current_BCC](const pair<int, long >& p){return p.second == -1;}) == current_BCC->sources.end()){
             current_BCC->isLeaf = true;
         }
         
@@ -1190,6 +1203,7 @@ void explode(mptnode* leaf_node){
 
 long threshold= 10000;
 long it_num=0;
+long prev_bound=0;
 
 bool assess_paths(mptnode* current_node){
     auto leaf_it = find(tree_leaves.begin(), tree_leaves.end(), current_node);
@@ -1209,11 +1223,14 @@ bool assess_paths(mptnode* current_node){
         if(usage_output.ru_maxrss>400000000) // if usage greater than about 400GB, return
             return running_bound >= z;
 
+
         // if we are at the root of the tree, we are done
         if(current_node == mptree){
             if(tree_leaves.size() == 1 && current_node->children.size() == 0){
+
                 running_bound = current_node->corrBCC->bound_multiplier;
-                cout << "Found actual number of paths: " << running_bound << endl;
+
+                // cout << "Found actual number of paths: " << running_bound << endl;
                 return running_bound >= z;
             }
             else{ // pick another leaf
@@ -1232,10 +1249,11 @@ bool assess_paths(mptnode* current_node){
         cout << "Component has size " << current_node->corrBCC->nodes.size() <<endl<<flush;
         }
 
-
         if(DEBUG){
             printLeaves();
             printSemiLeaves();
+            printTreeComponents(mptree);
+
         }
         
 
@@ -1247,10 +1265,36 @@ bool assess_paths(mptnode* current_node){
         calls_performed++;
         // cout << "*"<<flush;
 
+        // cout << "It number " << calls_performed<< "; Updated running bound: "<< running_bound <<endl;
+
+        // printTreeComponents(mptree);
+        // printMPtree(mptree);
+        
+        
         if(DEBUG){
+            printTreeComponents(mptree);
             printMPtree(mptree);
             cout << endl;
+            printLeaves();
+            printSemiLeaves();
         }
+
+        if(running_bound< prev_bound){
+            cout << "ERROR: bound decreased, it was "<<prev_bound << " and now is " << running_bound << endl;
+            // return false;
+            printTreeComponents(mptree);
+            printMPtree(mptree);
+            cout << endl;
+            printLeaves();
+            printSemiLeaves();
+            cout << flush;
+
+            throw logic_error("ERROR: running lower bound decreased");
+        }
+
+        prev_bound= running_bound;
+
+        
 
         // printMPtree(mptree);
         // cout << endl;
@@ -1269,7 +1313,6 @@ bool assess_paths(mptnode* current_node){
         // tree_leaves.erase(tree_leaves.begin() + leaf_index);
  
 
-        // cout << "Updated running bound: "<< running_bound <<endl;
 
         
         // if(running_bound>threshold){
@@ -1312,7 +1355,7 @@ int main(int argc, char** argv) {
     }
 
     string outname;
-    char CHOICE = 'r';
+    char CHOICE = 'l';
 
 
 
@@ -1390,8 +1433,8 @@ int main(int argc, char** argv) {
             cout << "Choice: random" <<endl;
             break;
         default:
-            leaf_choice_f = pick_random_leaf;
-            cout << "Choice: random" <<endl;
+            leaf_choice_f = pick_LIFO_leaf;
+            cout << "Choice: LIFO" <<endl;
     }
 
     cout << "Time\tbound\tNum it\tMem\ttree size\tMem/tree\tMin size\tMax size\tAvg size" << endl;
@@ -1401,6 +1444,12 @@ int main(int argc, char** argv) {
     bool enough = assess_paths(graph_node);
     uint64_t duration = (timeMs() - start_time);
 
+    struct rusage usage_output;
+    int usageint = getrusage(RUSAGE_SELF, &usage_output); // measure memory usage 
+
+    cout << duration << "\t" << running_bound << "\t"<< calls_performed << "\t" << usage_output.ru_maxrss << "\t0\t0\t0\t0\t0"<< endl;
+
+
     // cout << "Elapsed time: " << duration << "ms"  << endl<<flush;
 
     // if(enough)
@@ -1408,8 +1457,7 @@ int main(int argc, char** argv) {
     // else    
     //     cout << "The paths are exactly " << running_bound << " < z=" << z << endl;
 
-    struct rusage usage_output;
-    int usageint = getrusage(RUSAGE_SELF, &usage_output); // measure memory usage 
+    
 
     if(argc >= 8){
         ofstream output_graph;
