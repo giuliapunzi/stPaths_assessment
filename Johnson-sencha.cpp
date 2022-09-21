@@ -19,12 +19,12 @@ using namespace std;
 
 vector<int> blocked;
 vector<unordered_set<int>*> B;
-long all_paths = 0;
+uint64_t all_paths = 0;
 long MAX_TIME = -1;
 
 int SOURCE;
 int TARGET;
-long long z;
+uint64_t z;
 
 ///////////////////////////////////////////////////////////
 
@@ -409,7 +409,8 @@ int main(int argc, char * argv[]){
 
     SOURCE = atoi(argv[2]);
     TARGET = atoi(argv[3]);
-    z = atol(argv[4]);
+    // z = atol(argv[4]);
+    z=stoull(argv[4]); // converts string to unsigned long long 
 
     // cout << "G: " << argv[1] << " S: " << SOURCE << " T: " << TARGET;
 
