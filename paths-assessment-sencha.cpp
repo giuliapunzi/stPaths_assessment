@@ -29,9 +29,9 @@ int N; // size of the graph/biggest component; used for global vectors
 int M; // number of edges of the graph
 int maxID = 0; // maximum ID of a BCC
 int s, t; // original source and target for st-paths problem
-long long z; // value to assess for
+uint64_t z; // value to assess for
 long MAX_TIME = -1;
-unsigned long long running_bound = 1;
+uint64_t running_bound = 1;
 
 
 //---------------global vectors and variables for logs
@@ -60,11 +60,11 @@ vector<int> induced_nodes;
 // -----------
 
 struct BCC {
-    vector<pair<int,long>> sources; // vector of paths' sources contained in the BCC. Multiplicity will be -1 for sources which are ONLY art points 
+    vector<pair<int, uint64_t>> sources; // vector of paths' sources contained in the BCC. Multiplicity will be -1 for sources which are ONLY art points 
     int target; // target of the BCC = only articulation point leading to t 
     long personalBound; // personal bound of current BCC = |edges| - |nodes| + 1
-    long bound_multiplier; // multiplier given by the number of sources and their multiplicity; this influences the whole leaf-to-root path
-    long prodAncestors; // product of the personal bounds of all BCCs in the bead string from current to root
+    uint64_t bound_multiplier; // multiplier given by the number of sources and their multiplicity; this influences the whole leaf-to-root path
+    uint64_t prodAncestors; // product of the personal bounds of all BCCs in the bead string from current to root
     int myID; // personal ID of the BCC
     bool isLeaf; // true iff the BCC is a leaf of the block-cut tree
 
@@ -92,7 +92,7 @@ mptnode* mptree; // global structure; this is a pointer to the root of the multi
 // vector<BCC*> tree_leaves; // vector of pointers to BCC leaves of the multisource paths tree  
 // vector<BCC*> all_tree_nodes; // all the BCCs composing the multisource paths tree
 
-long long inline leaf_to_root_bound(mptnode* tree_node){
+uint64_t inline leaf_to_root_bound(mptnode* tree_node){
     return tree_node->corrBCC->personalBound*tree_node->corrBCC->prodAncestors*tree_node->corrBCC->bound_multiplier;
 }
 
@@ -496,9 +496,9 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                     
                     // multiplicity of the node is -1 if it is an art point; otherwise it is the multiplicity
                     // of the just-removed source summed to the possible multiplicity x could have, if it was a source of B
-                    long source_multiplicity = 0;
+                    uint64_t source_multiplicity = 0;
                     bool art_pt = is_art_point[x];
-                    vector<pair<int,long>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&x](const pair<int,long> &p){return p.first==x;});
+                    vector<pair<int,uint64_t>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&x](const pair<int,uint64_t> &p){return p.first==x;});
                     bool old_source = (find_if_source != B->sources.end());
                     bool source_neigh = (find(source_neighbors.begin(), source_neighbors.end(), x) != source_neighbors.end());
 
@@ -527,9 +527,9 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 
                 // multiplicity of the node is -1 if it is an art point; otherwise it is the multiplicity
                 // of the just-removed source summed to the possible multiplicity v could have, if it was a source of B
-                long source_multiplicity = 0;
+                uint64_t source_multiplicity = 0;
                 bool art_pt = is_art_point[v];
-                vector<pair<int,long>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&v](const pair<int,long> &p){return p.first==v;});
+                vector<pair<int,uint64_t>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&v](const pair<int,uint64_t> &p){return p.first==v;});
                 bool old_source = (find_if_source != B->sources.end());
                 bool source_neigh = (find(source_neighbors.begin(), source_neighbors.end(), v) != source_neighbors.end());
 
@@ -606,7 +606,7 @@ void findBCCs(int u, BCC* B, vector<BCC*> &BCC_vector, vector<int> &source_neigh
                 // if(DEBUG) cout << "Personal bound is " << current_BCC->personalBound <<endl;
 
                 // also, set up if it is a leaf: that is, if it ONLY has sources with multiplicity > 0, that is, they are neighbors of the source
-                if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [](const pair<int, long>& p){return p.second == -1;}) == current_BCC->sources.end())
+                if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [](const pair<int, uint64_t>& p){return p.second == -1;}) == current_BCC->sources.end())
                     current_BCC->isLeaf = true;
 
 
@@ -794,7 +794,7 @@ void explode(mptnode* leaf_node){
 
         // find the source of the parent that corresponds to the target of B
         mptnode * parent_node = leaf_node->parent;
-        vector<pair<int,long>>::iterator find_source = find_if(parent_node->corrBCC->sources.begin(), parent_node->corrBCC->sources.end(), [&B](const pair<int,long> p){return p.first == B->target;});
+        vector<pair<int,uint64_t>>::iterator find_source = find_if(parent_node->corrBCC->sources.begin(), parent_node->corrBCC->sources.end(), [&B](const pair<int,uint64_t> p){return p.first == B->target;});
         if(find_source == parent_node->corrBCC->sources.end())
             throw logic_error("Target of child node is not a source of parent node");
 
@@ -852,10 +852,10 @@ void explode(mptnode* leaf_node){
 
     // choose a source at random 
     int sIndex = rand() % B->sources.size();
-    pair<int,long> sBpair = B->sources[sIndex];
+    pair<int,uint64_t> sBpair = B->sources[sIndex];
 
     // remember multiplicity of s, as it will be the starting one of all its neighbors
-    long og_multiplicity = sBpair.second;
+    uint64_t og_multiplicity = sBpair.second;
     int sB = sBpair.first;
 
     if(og_multiplicity == -1){ // the BCC had children BCCs
@@ -973,7 +973,7 @@ void explode(mptnode* leaf_node){
             semi_leaf_index=tree_semi_leaves.size()-1;
         }
 
-        auto update_it = find_if(source_to_update->sources.begin(), source_to_update->sources.end(), [& newB](const pair<int,long> p){return p.first == newB->target;}); // find position of source to update
+        auto update_it = find_if(source_to_update->sources.begin(), source_to_update->sources.end(), [& newB](const pair<int,uint64_t> p){return p.first == newB->target;}); // find position of source to update
         // now, check if pair has -1 as second element, change it to og multiplicity, otherwise increase it by og multiplicity. Also, increase multiplier by og multiplicity in any case
         if(source_to_update->sources[update_it - source_to_update->sources.begin()].second == -1)
             source_to_update->sources[update_it - source_to_update->sources.begin()].second = og_multiplicity;
@@ -1031,9 +1031,9 @@ void explode(mptnode* leaf_node){
 
             // multiplicity of the node is -1 if it is an art point; otherwise it is the multiplicity
             // of the just-removed source summed to the possible multiplicity x could have, if it was a source of B
-            long source_multiplicity = 0;
+            uint64_t source_multiplicity = 0;
             bool art_pt = is_art_point[stack_el];
-            vector<pair<int,long>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&stack_el](const pair<int,long> &p){return p.first==stack_el;});
+            vector<pair<int,uint64_t>>::iterator find_if_source = find_if(B->sources.begin(), B->sources.end(), [&stack_el](const pair<int,uint64_t> &p){return p.first==stack_el;});
             bool old_source = (find_if_source != B->sources.end());
             bool source_neigh = (find(source_neighbors.begin(), source_neighbors.end(), stack_el) != source_neighbors.end());
 
@@ -1106,7 +1106,7 @@ void explode(mptnode* leaf_node){
         
 
         // also, set up if it is a leaf: that is, if it ONLY has sources with multiplicity > 0, that is, they are neighbors of the source
-        if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [&current_BCC](const pair<int, long >& p){return p.second == -1;}) == current_BCC->sources.end()){
+        if(find_if(current_BCC->sources.begin(), current_BCC->sources.end(), [&current_BCC](const pair<int, uint64_t >& p){return p.second == -1;}) == current_BCC->sources.end()){
             current_BCC->isLeaf = true;
         }
         
@@ -1201,9 +1201,9 @@ void explode(mptnode* leaf_node){
     return;
 }
 
-long threshold= 10000;
+uint64_t threshold= 10000;
 long it_num=0;
-long prev_bound=0;
+uint64_t prev_bound=0;
 
 bool assess_paths(mptnode* current_node){
     auto leaf_it = find(tree_leaves.begin(), tree_leaves.end(), current_node);
@@ -1282,12 +1282,12 @@ bool assess_paths(mptnode* current_node){
         if(running_bound< prev_bound){
             cout << "ERROR: bound decreased, it was "<<prev_bound << " and now is " << running_bound << endl;
             // return false;
-            printTreeComponents(mptree);
-            printMPtree(mptree);
-            cout << endl;
-            printLeaves();
-            printSemiLeaves();
-            cout << flush;
+            // printTreeComponents(mptree);
+            // printMPtree(mptree);
+            // cout << endl;
+            // printLeaves();
+            // printSemiLeaves();
+            // cout << flush;
 
             throw logic_error("ERROR: running lower bound decreased");
         }
@@ -1367,7 +1367,11 @@ int main(int argc, char** argv) {
     s = atoi(argv[2]);
     t = atoi(argv[3]);
     // z = atoi(argv[4]);
-    z= atol(argv[4]);
+    // z= atoll(argv[4]);
+
+    z=stoull(argv[4]); // converts string to unsigned long long 
+    // char* end;
+    // z= strtoull(argv[4], &end, 10);
 
     // z=LLONG_MAX;
 
@@ -1410,6 +1414,7 @@ int main(int argc, char** argv) {
 
     // cout << "Choice is " << CHOICE << "and argv is "<< argv[6] << endl;
     // choose the next current node at random from the leaves
+    cout << "Assessing for " << z << endl;
     switch (CHOICE)
     {
         case 'm':
@@ -1436,7 +1441,7 @@ int main(int argc, char** argv) {
             leaf_choice_f = pick_LIFO_leaf;
             cout << "Choice: LIFO" <<endl;
     }
-
+    
     cout << "Time\tbound\tNum it\tMem\ttree size\tMem/tree\tMin size\tMax size\tAvg size" << endl;
 
 
