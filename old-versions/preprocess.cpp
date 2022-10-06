@@ -3,7 +3,6 @@
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
-#include <stack>
 
 using namespace std;
 
@@ -290,7 +289,7 @@ void find_caterpillar(int s, int t)
     parent[t] = -1;
 
     // cout << "About to find art points from "<< s << " to "<< t <<endl;
-    // if(DEBUG) printGraph();
+    if(DEBUG) printGraph();
     // uint64_t start = timeMs();
 
      // only interested in the ones from s to t = caterpillar
@@ -349,35 +348,9 @@ void DFS(int u){
 }
 
 
-// iterative DFS procedure from node u
-void DFS_iter(int u){
-    // initialize reachable
-    for(int i = 0; i< reachable.size(); i++)
-        reachable[i] = false;
-
-    stack<int> DFS_stack;
-    DFS_stack.push(u);
-
-    while (!DFS_stack.empty())
-    {
-        int v = DFS_stack.top();
-        DFS_stack.pop();
-        reachable[v] = true;
-
-        for (auto x : G[v])
-        {
-            if(!reachable[x]) // and not dleted
-                DFS_stack.push(x);
-        }
-        
-    }
-    
-}
-
-
 int main(int argc, char** argv) { 
     if(argc < 2){
-        cout << "USAGE: " << argv[0] << " <input filename> [output-directory]\n";
+        cout << "USAGE: " << argv[0] << " <input filename> [output-filename]\n";
         return 0;
     }
     
@@ -388,7 +361,6 @@ int main(int argc, char** argv) {
         reachable[i] = 0;
 
     srand (time(NULL));
-    // srand(42);
 
     s = rand() % G.size();
     t = rand() % G.size();
@@ -418,27 +390,26 @@ int main(int argc, char** argv) {
 
 
     if(argc >= 3) outname = argv[2];
-    else outname = "./"; // current directory if not specified
-    
-    string inname = argv[1];
+    else{
+        string inname = argv[1];
 
-    // int inlen = sizeof(argv[1])/sizeof(*argv[1]);
-    // cout << "size is " << inname.length() << endl;
+        // int inlen = sizeof(argv[1])/sizeof(*argv[1]);
+        // cout << "size is " << inname.length() << endl;
 
-    // outname = "./preprocessed_datasets/";
-    // cout << "outname=" << outname << endl << flush;
+        outname = "./preprocessed_datasets/";
+        // cout << "outname=" << outname << endl << flush;
 
-    for(int i=7; i<inname.length()-4; i++)
-        outname = outname+(inname[i]);
+        for(int i=0; i<inname.length()-4; i++)
+            outname = outname+(inname[i]);
 
-    outname = outname + "-"+ to_string(new_names[s])+"-"+to_string(new_names[t])+".nde";
-    
-    if(DEBUG) cout << "Outname is " << outname << endl<<flush;
+        outname = outname + "-"+ to_string(new_names[s])+"-"+to_string(new_names[t])+".nde";
+    }
+    // cout << "Outname is " << outname << endl<<flush;
 
     
     write_graph(argv[1]);
 
     cout << outname << " " << new_names[s] << " " << new_names[t] << endl;
 
-    return 0;
+    return 1;
 }

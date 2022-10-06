@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdint>
 #include <stack>
+#include <sys/resource.h>
 
 using namespace std;
 
@@ -18,12 +19,12 @@ using namespace std;
 
 vector<int> blocked;
 vector<unordered_set<int>*> B;
-long all_paths = 0;
+uint64_t all_paths = 0;
 long MAX_TIME = -1;
 
 int SOURCE;
 int TARGET;
-int z;
+uint64_t z;
 
 ///////////////////////////////////////////////////////////
 
@@ -330,10 +331,32 @@ long time_evals = 0;
 long eval_resolution = 10000;
 bool abort_alg = false;
 long calls_performed=0;
+vector<int> bound_measure;
+vector<int> time_measure;
+vector<long> it_measure;
+
+long threshold = 10000;
+int num_it = 100;
 
 short PATHS(int v){
     if(all_paths >= z)
         return true;
+    
+
+    if(timeMs() - start_time > threshold){
+    // if(calls_performed > num_it){ // every 100 iterations
+        // cout << "lb="<< running_bound<< "; calls=" << calls_performed << "; t="<< timeMs() - assess_start << "\t\t";
+        // bound_measure.push_back(all_paths);
+        // time_measure.push_back(timeMs() - start_time);
+        // it_measure.push_back(calls_performed);
+
+        struct rusage usage_output;
+        getrusage(RUSAGE_SELF, &usage_output);
+        cout << timeMs() - start_time << "\t" << all_paths << "\t"<< calls_performed << "\t" << usage_output.ru_maxrss << endl;
+
+        threshold+=10000;
+        num_it+=100;
+    }
 
     calls_performed++;
     if(abort_alg) return true;
@@ -386,7 +409,8 @@ int main(int argc, char * argv[]){
 
     SOURCE = atoi(argv[2]);
     TARGET = atoi(argv[3]);
-    z = atoi(argv[4]);
+    // z = atol(argv[4]);
+    z=stoull(argv[4]); // converts string to unsigned long long 
 
     // cout << "G: " << argv[1] << " S: " << SOURCE << " T: " << TARGET;
 
@@ -424,13 +448,14 @@ int main(int argc, char * argv[]){
     //         visited[i] = false;
     // }
 
-    // chech reachability of s from t
-    DFS_iter(TARGET);
 
-    if(!reachable[SOURCE]){
-        cout << "Node s is not reachable from t" << endl;
-        return 0;
-    }
+    // chech reachability of s from t -- NOT NEEDED IN THIS APPLICATION 
+    // DFS_iter(TARGET);
+
+    // if(!reachable[SOURCE]){
+    //     cout << "Node s is not reachable from t" << endl;
+    //     return 0;
+    // }
     
 
     start_time = timeMs();
@@ -441,19 +466,36 @@ int main(int argc, char * argv[]){
         blocked.push_back(0);
         B.push_back(new unordered_set<int>());
     }
+
+    cout << "Time\tBound\tCalls\tMem" << endl;
+
+
     PATHS(SOURCE);
 
     uint64_t duration = (timeMs() - start_time);
 
+    struct rusage usage_output;
+    int usageint = getrusage(RUSAGE_SELF, &usage_output); // measure memory usage 
+
+    cout << duration << "\t" << all_paths << "\t"<< calls_performed << "\t" << usage_output.ru_maxrss << endl;
+
     if(argc >= 7){
         ofstream output_graph;
         output_graph.open(argv[6]);
-        cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << " " << z << " " << all_paths/duration << endl;
+        output_graph << endl << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << " " << z << " " << all_paths/duration << endl;
+        output_graph << "Memory usage: " << usage_output.ru_maxrss << "kB"<< endl;
+        for(int i=0;i<time_measure.size(); i++){
+            output_graph << time_measure[i] << "\t"  << bound_measure[i] << "\t" << it_measure[i] << endl;
+        }
         output_graph.close();
     }
-    else
+    else{
         cout << "Johnson: "<< input_filename << " "<< numnodes << " " << numedges <<  " " << SOURCE << " " << TARGET << "; " << duration << " " << calls_performed  << " " << all_paths << " " << z << " " << all_paths/duration << endl;
-
+        cout << "Memory usage: " << usage_output.ru_maxrss/1000 << "MB"<< endl<<endl;
+        // for(int i=0;i<time_measure.size(); i++){
+        //     cout << time_measure[i] << "\t"  << bound_measure[i] << "\t" << it_measure[i] << endl;
+        // }
+    }
     
     // cout << "DONE! time: " << duration << "ms, rec calls: "<< calls_performed << ", paths: " << all_paths << endl;
     
