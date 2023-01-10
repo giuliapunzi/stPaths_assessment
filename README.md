@@ -44,7 +44,7 @@ It is useful to employ algorithm `preprocess.cpp` to cleanup the graph before as
 3. outputs the cleaned graph in a new file, called `input_graph-s-t.nde`.
 
 
-The files `create-circle.cpp`, `create-diamond.cpp`, and `create-ladder.cpp` can be used to create graphs of specific shapes (respectively, a cycle with several chords, a diamond graph as described in [[2]](#2), and a  ladder-shaped graph). They take in input the number of nodes and edges of the graph, and create an `.nde` file containing the graph. 
+The files `create-circle.cpp`, `create-diamond.cpp`, and `create-ladder.cpp` can be used to create graphs of specific shapes (respectively, a cycle with several chords, a diamond graph as described in [[3]](#3), and a  ladder-shaped graph). They take in input the number of nodes and edges of the graph, and create an `.nde` file containing the graph. 
 
 Algorithm `find-st.cpp` takes as input a graph in `.nde` format and it randomly tests pairs of nodes to find valid sources and targets (i.e. there is at least one path connecting the source to the target). It can be normally compiled as `g++ -O3 find-st.cpp -o executable_name`; the resulting executable takes just one input, the FILEDIRECTORY of the desired input graph. Thus, to execute it:
 ```
