@@ -1,4 +1,4 @@
-# stPaths_assessment
+# Assessment of st-paths in Undirected Graphs
 This repository contains the code for the algorithms of [[1]](#1). 
 More specifically, we have the code for three different algorithm for assessing the number of st-paths in an undirected graph. The algorithms will take as input a graph, a source node s, a target node t, and a threshold z. 
 The algorithms will assess whether the number of paths in the given graph from node s to node t are at least z, or not, and answer accordingly.
